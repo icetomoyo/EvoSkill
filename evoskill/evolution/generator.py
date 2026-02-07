@@ -189,7 +189,8 @@ async def main():
     """Test the skill"""
     # Add test code here
     print(f"{{SKILL_NAME}} v{{SKILL_VERSION}} loaded")
-    print(f"Available tools: {{{', '.join([t['name'] for t in SKILL_TOOLS])}}}")
+    tool_names = [t['name'] for t in SKILL_TOOLS]
+    print(f"Available tools: {{', '.join(tool_names)}}")
 
 
 if __name__ == "__main__":
