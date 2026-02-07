@@ -1,331 +1,363 @@
 """
-Skill 生成器
-
-根据需求分析生成 Skill 代码
+Skill 生成器 - 生成完整的 Skill 代码文件
 """
-
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, Any
 
-from evoskill.core.types import NeedAnalysis, SkillDesign, GeneratedSkill, ToolDefinition
+from evoskill.evolution.designer import SkillDesign, ToolDesign, ParameterSchema
 
 
 class SkillGenerator:
     """
     Skill 生成器
     
-    生成:
-    1. SKILL.md
-    2. main.py
-    3. tests/test_main.py
-    4. requirements.txt
+    根据 Skill 设计，生成完整的文件：
+    - SKILL.md
+    - main.py
+    - tests/test_main.py
     """
     
-    def __init__(self, llm_client=None):
-        self.llm_client = llm_client
-    
-    async def design(
-        self,
-        analysis: NeedAnalysis
-    ) -> SkillDesign:
-        """
-        设计 Skill
-        
-        Args:
-            analysis: 需求分析结果
-            
-        Returns:
-            Skill 设计方案
-        """
-        # 生成名称（kebab-case）
-        name = self._generate_name(analysis.user_need)
-        
-        # 生成工具列表
-        tools = self._design_tools(analysis)
-        
-        return SkillDesign(
-            name=name,
-            description=analysis.user_need[:100],
-            tools=tools,
-            file_structure=[
-                "SKILL.md",
-                "main.py",
-                "tests/test_main.py",
-                "requirements.txt",
-            ],
-            implementation_plan=self._generate_plan(analysis),
-        )
-    
-    def _generate_name(self, user_need: str) -> str:
-        """从需求生成 Skill 名称"""
-        # 简单实现：提取关键词并转换
-        import re
-        
-        # 去除标点，取前 3-4 个词
-        words = re.findall(r'\w+', user_need.lower())
-        words = [w for w in words if len(w) > 2][:3]
-        
-        if not words:
-            words = ["custom", "skill"]
-        
-        return "-".join(words)
-    
-    def _design_tools(self, analysis: NeedAnalysis) -> List[ToolDefinition]:
-        """设计工具列表"""
-        from evoskill.core.types import ParameterSchema
-        
-        tools = []
-        
-        for feature in analysis.core_features[:3]:  # 最多 3 个工具
-            # 生成工具名
-            tool_name = feature.replace(" ", "_").replace("-", "_")[:30]
-            
-            tool = ToolDefinition(
-                name=tool_name,
-                description=feature,
-                parameters={
-                    "input": ParameterSchema(
-                        type="string",
-                        description="输入参数",
-                        required=True,
-                    )
-                },
-                handler=None,  # 稍后绑定
-            )
-            tools.append(tool)
-        
-        return tools
-    
-    def _generate_plan(self, analysis: NeedAnalysis) -> str:
-        """生成实现计划"""
-        return f"""实现计划:
-1. 实现核心功能: {', '.join(analysis.core_features)}
-2. 处理输入: {', '.join(analysis.inputs)}
-3. 生成输出: {', '.join(analysis.outputs)}
-4. 错误处理
-"""
-    
-    async def generate(
+    def generate(
         self,
         design: SkillDesign,
-        analysis: NeedAnalysis
-    ) -> GeneratedSkill:
+        output_dir: Path,
+    ) -> Dict[str, Path]:
         """
-        生成 Skill 代码
+        生成完整的 Skill 文件
         
         Args:
-            design: Skill 设计方案
-            analysis: 需求分析
+            design: Skill 设计
+            output_dir: 输出目录
             
         Returns:
-            生成的 Skill
+            生成的文件路径字典
         """
-        skill_md = self._generate_skill_md(design, analysis)
-        main_code = self._generate_main_py(design, analysis)
-        test_code = self._generate_test_py(design)
-        requirements = self._generate_requirements(analysis)
+        # 创建目录
+        skill_dir = output_dir / design.name
+        skill_dir.mkdir(parents=True, exist_ok=True)
         
-        return GeneratedSkill(
-            skill_md=skill_md,
-            main_code=main_code,
-            test_code=test_code,
-            requirements=requirements,
-            design=design,
-        )
+        tests_dir = skill_dir / "tests"
+        tests_dir.mkdir(exist_ok=True)
+        
+        generated_files = {}
+        
+        # 生成 SKILL.md
+        skill_md_path = skill_dir / "SKILL.md"
+        skill_md_content = self._generate_skill_md(design)
+        skill_md_path.write_text(skill_md_content, encoding="utf-8")
+        generated_files["skill_md"] = skill_md_path
+        
+        # 生成 main.py
+        main_py_path = skill_dir / "main.py"
+        main_py_content = self._generate_main_py(design)
+        main_py_path.write_text(main_py_content, encoding="utf-8")
+        generated_files["main_py"] = main_py_path
+        
+        # 生成测试文件
+        test_py_path = tests_dir / "test_main.py"
+        test_py_content = self._generate_test_py(design)
+        test_py_path.write_text(test_py_content, encoding="utf-8")
+        generated_files["test_py"] = test_py_path
+        
+        # 创建 __init__.py
+        init_py_path = skill_dir / "__init__.py"
+        init_py_path.write_text("# Skill package\n", encoding="utf-8")
+        
+        return generated_files
     
-    def _generate_skill_md(
-        self,
-        design: SkillDesign,
-        analysis: NeedAnalysis
-    ) -> str:
-        """生成 SKILL.md"""
-        tools_yaml = []
+    def _generate_skill_md(self, design: SkillDesign) -> str:
+        """生成 SKILL.md 内容"""
+        tools_section = ""
         for tool in design.tools:
-            params = []
-            for param_name, param in tool.parameters.items():
-                params.append(f"""
-      {param_name}:
-        type: {param.type}
-        description: {param.description}
-        required: {str(param.required).lower()}""")
+            params = "\n".join([
+                f"- `{name}` ({p.type}{', required' if p.required else ', optional'}): {p.description}"
+                for name, p in tool.parameters.items()
+            ]) if tool.parameters else "- 无参数"
             
-            tools_yaml.append(f"""  - name: {tool.name}
-    description: {tool.description}
-    parameters:{''.join(params)}""")
-        
-        return f"""---
-name: {design.name}
-description: {design.description}
-version: 1.0.0
-author: evoskill
-tools:
-{chr(10).join(tools_yaml)}
----
+            errors = "\n".join([f"- {e}" for e in tool.errors]) if tool.errors else "- 无特定错误"
+            
+            tools_section += f"""
+### {tool.name}
 
-# {design.name}
+{tool.description}
+
+**参数**:
+{params}
+
+**返回值**:
+{tool.returns}
+
+**错误处理**:
+{errors}
+
+"""
+        
+        examples_section = ""
+        for i, example in enumerate(design.examples, 1):
+            examples_section += f"""
+### 示例 {i}: {example.get('description', '用法示例')}
+
+```python
+{example.get('usage', '# TODO: add example')}
+```
+
+"""
+        
+        dependencies_section = ""
+        if design.dependencies:
+            deps = "\n".join([f"- `{dep}`" for dep in design.dependencies])
+            dependencies_section = f"""
+## 依赖
+
+{deps}
+
+安装依赖：
+```bash
+pip install {' '.join(design.dependencies)}
+```
+"""
+        
+        return f"""# {design.name}
+
+## 描述
 
 {design.description}
 
-## 功能
+## 版本
 
-{chr(10).join(f'- {f}' for f in analysis.core_features)}
+{design.version}
 
-## 使用场景
+## 工具
 
-当用户需要 {design.description} 时使用此 Skill。
-
-## 输入
-
-{chr(10).join(f'- {i}' for i in analysis.inputs)}
-
-## 输出
-
-{chr(10).join(f'- {o}' for o in analysis.outputs)}
-
-## 依赖
-
-{chr(10).join(f'- {d}' for d in analysis.dependencies) if analysis.dependencies else "无特殊依赖"}
-
+{tools_section}
 ## 示例
 
-```python
-# 使用 {design.tools[0].name if design.tools else 'main_tool'}
-result = {design.tools[0].name if design.tools else 'main_tool'}(
-    input="示例输入"
-)
-print(result)
-```
+{examples_section}
+{dependencies_section}
+---
+
+Generated by EvoSkill
 """
     
-    def _generate_main_py(
-        self,
-        design: SkillDesign,
-        analysis: NeedAnalysis
-    ) -> str:
-        """生成 main.py"""
+    def _generate_main_py(self, design: SkillDesign) -> str:
+        """生成 main.py 内容"""
+        imports = ["import asyncio", "from typing import Optional, Dict, Any, List"]
+        if design.dependencies:
+            imports.append("# External dependencies")
+            for dep in design.dependencies:
+                imports.append(f"import {dep.split('[')[0].split('=')[0].strip()}")
+        
+        imports_str = "\n".join(imports)
         
         # 生成工具函数
-        tool_functions = []
+        tools_code = []
         for tool in design.tools:
-            params_str = ", ".join(
-                f"{name}: {self._py_type(param.type)}"
-                for name, param in tool.parameters.items()
-            )
-            
-            tool_func = f'''
-async def {tool.name}({params_str}) -> str:
+            tool_code = self._generate_tool_function(tool)
+            tools_code.append(tool_code)
+        
+        tools_str = "\n\n\n".join(tools_code)
+        
+        # 生成工具注册信息
+        tools_list = ",\n        ".join([
+            f'{{"name": "{tool.name}", "description": "{tool.description}", "handler": {tool.name}}}'
+            for tool in design.tools
+        ])
+        
+        return f'''"""
+{design.description}
+
+Skill: {design.name}
+Version: {design.version}
+"""
+
+{imports_str}
+
+
+{tools_str}
+
+
+# Skill metadata for registration
+SKILL_NAME = "{design.name}"
+SKILL_VERSION = "{design.version}"
+SKILL_DESCRIPTION = "{design.description}"
+SKILL_TOOLS = [
+    {tools_list}
+]
+
+
+async def main():
+    """Test the skill"""
+    # Add test code here
+    print(f"{{SKILL_NAME}} v{{SKILL_VERSION}} loaded")
+    print(f"Available tools: {{{', '.join([t['name'] for t in SKILL_TOOLS])}}}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+'''
+    
+    def _generate_tool_function(self, tool: ToolDesign) -> str:
+        """生成单个工具函数"""
+        # 构建参数列表
+        params = []
+        for name, param in tool.parameters.items():
+            if param.required:
+                params.append(f"{name}: {self._python_type(param.type)}")
+            else:
+                default_val = f" = {repr(param.default)}" if param.default is not None else " = None"
+                params.append(f"{name}: Optional[{self._python_type(param.type)}]{default_val}")
+        
+        params_str = ", ".join(params) if params else ""
+        
+        # 构建文档字符串
+        doc_params = "\n    ".join([
+            f"{name} ({p.type}): {p.description}"
+            for name, p in tool.parameters.items()
+        ]) if tool.parameters else "None"
+        
+        doc_errors = "\n    ".join(tool.errors) if tool.errors else "None"
+        
+        # 构建实现代码
+        implementation = self._generate_implementation(tool)
+        
+        return f'''async def {tool.name}({params_str}) -> Dict[str, Any]:
     """
     {tool.description}
     
     Args:
-{chr(10).join(f'        {name}: {param.description}' for name, param in tool.parameters.items())}
-        
+        {doc_params}
+    
     Returns:
-        处理结果
+        {tool.returns}
+    
+    Raises:
+        {doc_errors}
     """
-    # TODO: 实现 {tool.name} 的逻辑
-    
     try:
-        # 核心逻辑
-        result = f"处理了: {{{list(tool.parameters.keys())[0] if tool.parameters else 'input'}}}"
-        return result
+{implementation}
     except Exception as e:
-        return f"Error: {{str(e)}}"
+        return {{
+            "success": False,
+            "error": str(e),
+        }}
 '''
-            tool_functions.append(tool_func)
-        
-        return f'''"""
-{design.name} - {design.description}
-
-{chr(10).join(f"- {f}" for f in analysis.core_features)}
-"""
-
-import asyncio
-from typing import Optional
-
-{chr(10).join(tool_functions)}
-
-
-if __name__ == "__main__":
-    # 测试代码
-    async def test():
-        {f'result = await {design.tools[0].name}("测试输入")' if design.tools else 'print("No tools defined")'}
-        {f'print(result)' if design.tools else ''}
     
-    asyncio.run(test())
-'''
+    def _generate_implementation(self, tool: ToolDesign) -> str:
+        """生成工具实现代码"""
+        hint = tool.implementation_hint
+        
+        # 根据提示生成基础实现
+        if "read" in hint.lower() or "file" in hint.lower():
+            return '''        # Read file implementation
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        return {
+            "success": True,
+            "result": content,
+        }'''
+        elif "write" in hint.lower():
+            return '''        # Write file implementation
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        
+        return {
+            "success": True,
+            "result": f"File written: {file_path}",
+        }'''
+        elif "http" in hint.lower() or "request" in hint.lower() or "url" in hint.lower():
+            return '''        # HTTP request implementation
+        import aiohttp
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                data = await response.text()
+        
+        return {
+            "success": True,
+            "result": data,
+        }'''
+        else:
+            # 通用实现模板
+            return '''        # TODO: Implement the core logic
+        # Hint: ''' + hint.replace('\n', '\n        # ') + '''
+        
+        result = "Implementation needed"
+        
+        return {
+            "success": True,
+            "result": result,
+        }'''
     
     def _generate_test_py(self, design: SkillDesign) -> str:
         """生成测试文件"""
+        test_functions = []
         
-        test_cases = []
         for tool in design.tools:
-            test_cases.append(f'''
+            # 构建测试参数
+            test_params = []
+            for name, param in tool.parameters.items():
+                if param.type == "string":
+                    test_params.append(f'"test_{name}"')
+                elif param.type == "int":
+                    test_params.append("1")
+                elif param.type == "bool":
+                    test_params.append("True")
+                elif param.type == "list":
+                    test_params.append("[]")
+                elif param.type == "dict":
+                    test_params.append("{}")
+                else:
+                    test_params.append("None")
+            
+            test_params_str = ", ".join(test_params) if test_params else ""
+            
+            test_functions.append(f'''
 @pytest.mark.asyncio
 async def test_{tool.name}():
-    """测试 {tool.name}"""
-    result = await {tool.name}(
-        input="测试输入"
-    )
-    assert result is not None
-    assert isinstance(result, str)
+    """Test {tool.name}"""
+    result = await {tool.name}({test_params_str})
+    
+    assert isinstance(result, dict)
+    assert "success" in result
 ''')
         
+        tests_str = "\n".join(test_functions)
+        
         return f'''"""
-测试 {design.name}
+Tests for {design.name} skill
 """
-
 import pytest
-from ..main import (
-    {",".join(f"{tool.name}" for tool in design.tools)}
-)
+import asyncio
+import sys
+from pathlib import Path
 
-{chr(10).join(test_cases)}
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from main import {', '.join([t.name for t in design.tools])}
+
+
+{tests_str}
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
 '''
     
-    def _generate_requirements(self, analysis: NeedAnalysis) -> str:
-        """生成 requirements.txt"""
-        deps = ["pytest-asyncio"] if analysis.dependencies else []
-        return "\n".join(deps) or "# 无特殊依赖"
-    
-    def _py_type(self, json_type: str) -> str:
-        """JSON 类型转 Python 类型"""
-        type_map = {
+    def _python_type(self, json_type: str) -> str:
+        """将 JSON 类型转换为 Python 类型"""
+        type_mapping = {
             "string": "str",
+            "int": "int",
             "integer": "int",
+            "float": "float",
             "number": "float",
+            "bool": "bool",
             "boolean": "bool",
-            "array": "list",
-            "object": "dict",
+            "list": "List",
+            "array": "List",
+            "dict": "Dict",
+            "object": "Dict",
         }
-        return type_map.get(json_type, "Any")
-
-
-class SkillValidator:
-    """Skill 验证器"""
-    
-    async def validate(self, generated: GeneratedSkill) -> tuple[bool, List[str]]:
-        """
-        验证生成的 Skill
-        
-        Returns:
-            (是否通过, 错误信息列表)
-        """
-        errors = []
-        
-        # 1. 语法检查
-        try:
-            import ast
-            ast.parse(generated.main_code)
-        except SyntaxError as e:
-            errors.append(f"Syntax error in main.py: {e}")
-        
-        # 2. 检查 SKILL.md 格式
-        if "---" not in generated.skill_md:
-            errors.append("SKILL.md missing frontmatter")
-        
-        # 3. 检查是否有工具定义
-        if not generated.design.tools:
-            errors.append("No tools defined")
-        
-        return len(errors) == 0, errors
+        return type_mapping.get(json_type.lower(), "Any")

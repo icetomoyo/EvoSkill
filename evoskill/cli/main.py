@@ -125,8 +125,21 @@ async def _chat_async(workspace: Optional[Path], skills_dir: Optional[Path]):
     for skill in loaded_skills:
         session.register_skill(skill)
     
+    # 准备现有 skills 信息（用于匹配）
+    existing_skills_info = [
+        {
+            "name": skill.name,
+            "description": skill.description,
+            "tools": [{"name": t.name, "description": t.description} for t in skill.tools],
+        }
+        for skill in loaded_skills
+    ]
+    
     # 创建进化引擎
-    evolution = SkillEvolutionEngine(settings.skills_dir, None)
+    evolution = SkillEvolutionEngine(
+        llm_provider=session.llm_provider,
+        skills_dir=settings.skills_dir,
+    )
     
     # 欢迎信息
     console.print(Panel.fit(
@@ -171,7 +184,7 @@ async def _chat_async(workspace: Optional[Path], skills_dir: Optional[Path]):
                 elif cmd.startswith("create "):
                     skill_name = cmd[7:].strip()
                     if skill_name:
-                        await _create_skill(evolution, skill_name)
+                        await _create_skill(evolution, skill_name, existing_skills_info)
                     continue
                 
                 else:
@@ -212,6 +225,22 @@ async def _chat_async(workspace: Optional[Path], skills_dir: Optional[Path]):
                         console.print(f"[red][ERROR] 工具执行失败[/red]")
                     else:
                         console.print(f"[dim][DONE] 工具执行完成[/dim]")
+                elif event.type == EventType.CONTEXT_WARNING:
+                    # 上下文警告（75% 阈值）
+                    message = event.data.get("message", "")
+                    if message:
+                        console.print(f"\n[yellow][!] {message}[/yellow]")
+                elif event.type == EventType.CONTEXT_COMPACTED:
+                    # 上下文已压缩（80% 阈值）
+                    original = event.data.get("original_tokens", 0)
+                    new = event.data.get("new_tokens", 0)
+                    saved = event.data.get("saved_ratio", 0) * 100
+                    count = event.data.get("compacted_count", 0)
+                    console.print(
+                        f"\n[dim][↻] 上下文已压缩: "
+                        f"{original}→{new} tokens (-{saved:.1f}%), "
+                        f"合并 {count} 条消息[/dim]"
+                    )
             
             console.print()  # 换行
         
@@ -265,17 +294,61 @@ def _show_skills(loader: SkillLoader):
     console.print(table)
 
 
-async def _create_skill(engine: SkillEvolutionEngine, description: str):
+async def _create_skill(engine: SkillEvolutionEngine, description: str, existing_skills: list):
     """创建新 Skill"""
-    console.print(f"[yellow]正在创建 Skill: {description}[/yellow]")
+    console.print(f"[yellow]正在分析需求: {description}[/yellow]")
     
-    async for event in engine.evolve(description):
+    current_stage = ""
+    
+    async for event in engine.evolve(description, existing_skills):
         if event.type == EventType.SKILL_CREATED:
             data = event.data
-            if data.get("status") == "completed":
-                console.print(f"[green][OK] 已创建: {data.get('skill_name')}[/green]")
-            elif data.get("status") == "failed":
-                console.print(f"[red][ERROR] 失败: {data.get('error')}[/red]")
+            status = data.get("status", "")
+            
+            # 显示进度
+            if status == "analyzing":
+                console.print("[dim]  → 正在分析需求...[/dim]")
+            elif status == "matching":
+                console.print("[dim]  → 正在匹配现有 Skills...[/dim]")
+            elif status == "reused":
+                console.print(f"[green]✓ 使用现有 Skill: {data.get('skill_name')}[/green]")
+                console.print(f"[dim]   原因: {data.get('match_reason', '')}[/dim]")
+                return
+            elif status == "designing":
+                console.print("[dim]  → 正在设计新 Skill...[/dim]")
+            elif status == "designed":
+                skill_name = data.get('skill_name')
+                tools = data.get('tools', [])
+                console.print(f"[green]✓ 设计完成: {skill_name}[/green]")
+                console.print(f"[dim]   包含工具: {', '.join(tools)}[/dim]")
+            elif status == "generating":
+                console.print("[dim]  → 正在生成代码...[/dim]")
+            elif status == "generated":
+                files = data.get('files', [])
+                console.print(f"[green]✓ 代码生成完成[/green]")
+                console.print(f"[dim]   文件: {', '.join(files)}[/dim]")
+            elif status == "validating":
+                console.print("[dim]  → 正在验证代码...[/dim]")
+            elif status == "validated":
+                if data.get('valid'):
+                    console.print("[green]✓ 验证通过[/green]")
+                else:
+                    console.print("[yellow]⚠ 验证警告[/yellow]")
+                    if data.get('errors'):
+                        for error in data.get('errors'):
+                            console.print(f"[red]   - {error}[/red]")
+            elif status == "integrating":
+                console.print("[dim]  → 正在集成到系统...[/dim]")
+            elif status == "completed":
+                skill_name = data.get('skill_name')
+                tools = data.get('tools', [])
+                console.print(f"[green]✅ Skill '{skill_name}' 创建完成并激活！[/green]")
+                console.print(f"[dim]   可用工具: {', '.join(tools)}[/dim]")
+                console.print(f"[dim]   现在可以直接使用这些工具了[/dim]")
+            elif status == "failed":
+                console.print(f"[red]❌ 创建失败: {data.get('message', '')}[/red]")
+            elif status == "warning":
+                console.print(f"[yellow]⚠ {data.get('message', '')}[/yellow]")
 
 
 @app.command()

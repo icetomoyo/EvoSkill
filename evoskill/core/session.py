@@ -31,6 +31,7 @@ from evoskill.core.types import (
 )
 from evoskill.core.events import EventEmitter
 from evoskill.core.llm import create_llm_provider, LLMProvider
+from evoskill.core.context_compactor import ContextCompactor, CompactResult
 
 
 class AgentSession:
@@ -74,6 +75,14 @@ class AgentSession:
         
         # LLM 提供商
         self._llm_provider: Optional[LLMProvider] = None
+        
+        # 上下文压缩器
+        max_context = getattr(llm_config, 'max_context_tokens', 128000)
+        self._compactor = ContextCompactor(
+            llm_provider=self.llm_provider,
+            max_context_tokens=max_context,
+        )
+        self._warning_issued = False  # 是否已发出警告
         
         # 统计
         self._total_tokens = 0
@@ -175,6 +184,9 @@ class AgentSession:
         await self.events.start()
         
         try:
+            # 0. 检查上下文状态（压缩/警告）
+            await self._check_and_compact_context()
+            
             # 1. 添加用户消息
             user_msg = UserMessage(
                 id=str(uuid.uuid4()),
@@ -440,6 +452,83 @@ class AgentSession:
         
         messages.extend(self.messages)
         return messages
+    
+    async def _check_and_compact_context(self) -> None:
+        """
+        检查上下文状态，必要时执行压缩
+        
+        策略：
+        - 75%: 发出警告（只警告一次）
+        - 80%: 自动执行压缩
+        """
+        if not self.messages:
+            return
+        
+        status = self._compactor.check_status(self.messages)
+        
+        # 检查是否达到压缩阈值（80%）
+        if status["should_compact"]:
+            await self.events.emit(Event(
+                type=EventType.CONTEXT_WARNING,
+                data={
+                    "message": "上下文即将达到上限，正在自动压缩...",
+                    "current_tokens": status["current_tokens"],
+                    "max_tokens": status["max_tokens"],
+                    "ratio": status["current_ratio"],
+                }
+            ))
+            
+            try:
+                # 执行压缩
+                result = await self._compactor.compact(
+                    messages=self.messages,
+                    system_prompt=self.system_prompt,
+                    tools=list(self._tools.values()),
+                )
+                
+                # 替换消息列表
+                self.messages = result.new_messages
+                self._warning_issued = False  # 重置警告状态
+                
+                # 发送压缩完成事件
+                await self.events.emit(Event(
+                    type=EventType.CONTEXT_COMPACTED,
+                    data={
+                        "original_tokens": result.original_token_count,
+                        "new_tokens": result.new_token_count,
+                        "saved_ratio": result.saved_ratio,
+                        "compacted_count": result.compacted_count,
+                        "summary": result.summary[:200] + "..." if len(result.summary) > 200 else result.summary,
+                    }
+                ))
+                
+            except Exception as e:
+                # 压缩失败，发送警告
+                await self.events.emit(Event(
+                    type=EventType.CONTEXT_WARNING,
+                    data={
+                        "message": f"上下文压缩失败: {e}",
+                        "current_tokens": status["current_tokens"],
+                        "max_tokens": status["max_tokens"],
+                    }
+                ))
+        
+        # 检查是否达到警告阈值（75%），且未发出过警告
+        elif status["should_warn"] and not self._warning_issued:
+            warning_msg = self._compactor.get_warning_message(status)
+            
+            await self.events.emit(Event(
+                type=EventType.CONTEXT_WARNING,
+                data={
+                    "message": warning_msg,
+                    "current_tokens": status["current_tokens"],
+                    "max_tokens": status["max_tokens"],
+                    "ratio": status["current_ratio"],
+                    "will_compact_at": self._compactor.compact_threshold,
+                }
+            ))
+            
+            self._warning_issued = True
     
     async def save(self, path: Optional[Path] = None) -> Path:
         """

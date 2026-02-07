@@ -138,6 +138,10 @@ class EventType(Enum):
     TOOL_EXECUTION_UPDATE = "tool_execution_update"
     TOOL_EXECUTION_END = "tool_execution_end"
     
+    # 上下文事件
+    CONTEXT_WARNING = "context_warning"      # 上下文即将达到上限警告
+    CONTEXT_COMPACTED = "context_compacted"  # 上下文已压缩
+    
     # Skill 事件
     SKILL_CREATED = "skill_created"
     SKILL_UPDATED = "skill_updated"
@@ -146,7 +150,6 @@ class EventType(Enum):
     # 系统事件
     AUTO_COMPACTION_START = "auto_compaction_start"
     AUTO_COMPACTION_END = "auto_compaction_end"
-    CONTEXT_COMPACTED = "context_compacted"
     
     # 流式事件
     TEXT_DELTA = "text_delta"

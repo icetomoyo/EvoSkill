@@ -100,10 +100,10 @@ class EvoSkillConfig(BaseSettings):
         description="会话存储目录"
     )
     
-    # 上下文配置 (简化设计)
+    # 上下文配置
     max_context_tokens: int = Field(
-        default=80000,
-        description="最大上下文 token 数，达到此值时自动触发压缩"
+        default=128000,
+        description="最大上下文 token 数，达到 80% 时自动触发压缩"
     )
     
     # 安全配置
@@ -330,14 +330,14 @@ temperature: 0.7
 # ============================================
 
 # max_context_tokens: 最大上下文 token 数
-#   - 当上下文接近此值时，自动触发压缩
-#   - 建议设置为模型上下文窗口的 80-90%
-#   - 例如:
-#     * gpt-4o-mini (128k): 设为 100000
-#     * Kimi 128k: 设为 100000
-#     * Kimi 32k: 设为 25000
-#     * 本地小模型 (8k): 设为 6000
-max_context_tokens: 80000
+#   - 达到 75% 时发出警告
+#   - 达到 80% 时自动压缩历史对话
+#   - 建议根据模型上下文窗口设置:
+#     * Kimi K2.5 (256k): 设为 200000
+#     * Claude 3.5 (200k): 设为 160000
+#     * GPT-4o (128k): 设为 100000
+#     * GPT-4o-mini (128k): 设为 100000
+max_context_tokens: 128000
 
 # ============================================
 # 安全配置
