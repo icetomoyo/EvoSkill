@@ -503,3 +503,103 @@ def register_builtin_tools(session: AgentSession) -> None:
         },
         handler=execute_command
     )
+    
+    # 注册 Git Skill 工具
+    try:
+        from evoskill.skills.git_skill.main import (
+            git_status, git_diff, git_commit, git_log, git_branch
+        )
+        
+        session.register_tool(
+            name="git_status",
+            description="查看 Git 工作区状态（当前分支、修改的文件等）",
+            parameters={
+                "path": {
+                    "type": "string",
+                    "description": "要查看的路径，默认为当前目录",
+                    "required": False,
+                },
+                "short": {
+                    "type": "boolean",
+                    "description": "是否使用简洁格式",
+                    "required": False,
+                    "default": True,
+                }
+            },
+            handler=git_status
+        )
+        
+        session.register_tool(
+            name="git_diff",
+            description="查看文件的修改差异",
+            parameters={
+                "path": {
+                    "type": "string",
+                    "description": "要比较的文件路径，默认为所有文件",
+                    "required": False,
+                },
+                "cached": {
+                    "type": "boolean",
+                    "description": "是否查看已暂存的更改",
+                    "required": False,
+                    "default": False,
+                }
+            },
+            handler=git_diff
+        )
+        
+        session.register_tool(
+            name="git_commit",
+            description="提交代码更改到 Git 仓库",
+            parameters={
+                "message": {
+                    "type": "string",
+                    "description": "提交信息",
+                    "required": True,
+                },
+                "add_all": {
+                    "type": "boolean",
+                    "description": "是否自动暂存所有更改",
+                    "required": False,
+                    "default": False,
+                }
+            },
+            handler=git_commit
+        )
+        
+        session.register_tool(
+            name="git_log",
+            description="查看 Git 提交历史",
+            parameters={
+                "limit": {
+                    "type": "integer",
+                    "description": "显示的提交数量",
+                    "required": False,
+                    "default": 10,
+                },
+                "oneline": {
+                    "type": "boolean",
+                    "description": "是否使用单行格式",
+                    "required": False,
+                    "default": True,
+                }
+            },
+            handler=git_log
+        )
+        
+        session.register_tool(
+            name="git_branch",
+            description="查看 Git 分支列表",
+            parameters={
+                "list_branches": {
+                    "type": "boolean",
+                    "description": "是否列出所有分支",
+                    "required": False,
+                    "default": True,
+                }
+            },
+            handler=git_branch
+        )
+    except ImportError:
+        # Git skill 未安装或不可用
+        pass
