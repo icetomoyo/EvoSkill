@@ -53,7 +53,7 @@ class SkillEvolutionEngine:
         self.analyzer = NeedAnalyzer(llm_provider)
         self.matcher = SkillMatcher()
         self.designer = SkillDesigner(llm_provider)
-        self.generator = SkillGenerator()
+        self.generator = SkillGenerator(llm_provider)
         self.validator = SkillValidator()
         self.integrator = SkillIntegrator(skills_dir)
     
@@ -81,6 +81,38 @@ class SkillEvolutionEngine:
         )
         
         need = await self.analyzer.analyze(user_request, existing_skills)
+        
+        # 检查是否已存在同名 skill（基于建议的 skill 名称）
+        suggested_name = need.suggested_skill_name
+        existing_skill_names = {s.get("name") for s in existing_skills}
+        
+        if suggested_name in existing_skill_names:
+            # 检查目录是否也存在
+            skill_path = self.skills_dir / suggested_name
+            if skill_path.exists():
+                yield Event(
+                    type=EventType.SKILL_CREATED,
+                    data={
+                        "status": "reused",
+                        "skill_name": suggested_name,
+                        "message": f"Skill '{suggested_name}' 已存在",
+                        "match_reason": "同名 Skill 已存在",
+                        "result": EvolutionResult(
+                            status="reused",
+                            skill_name=suggested_name,
+                            skill_path=skill_path,
+                            message=f"Skill '{suggested_name}' 已存在，使用现有版本",
+                            need_analysis=need,
+                            match_result=MatchResult(
+                                skill_name=suggested_name,
+                                match_score=1.0,
+                                match_reason="同名 Skill 已存在",
+                                can_fulfill=True,
+                            ),
+                        ),
+                    }
+                )
+                return
         
         yield Event(
             type=EventType.SKILL_CREATED,
@@ -152,7 +184,7 @@ class SkillEvolutionEngine:
             }
         )
         
-        generated_files = self.generator.generate(design, self.skills_dir)
+        generated_files = await self.generator.generate(design, self.skills_dir)
         
         skill_path = self.skills_dir / design.name
         
@@ -265,6 +297,59 @@ class SkillEvolutionEngine:
                 }
             )
     
+    async def should_evolve(
+        self,
+        user_request: str,
+        existing_skills: List[Dict[str, Any]],
+    ) -> bool:
+        """
+        检查是否需要创建新 Skill
+        
+        使用启发式规则快速判断，避免不必要的 LLM 调用和误判
+        
+        Args:
+            user_request: 用户请求
+            existing_skills: 现有 Skills
+            
+        Returns:
+            是否需要进化（创建新 Skill）
+        """
+        request_lower = user_request.lower().strip()
+        
+        # 规则 1: 如果输入包含现有 skill 名称，可能是引用，不创建
+        for skill in existing_skills:
+            skill_name = skill.get("name", "").lower()
+            if skill_name and skill_name in request_lower:
+                return False
+        
+        # 规则 2: 常见对话/追问模式，不创建
+        conversation_patterns = [
+            "结果", "怎么样", "如何", "是什么", "为什么", "呢", "吗", "？", "?",
+            "继续", "然后呢", "还有吗", "详细", "解释一下", "说说看",
+            "help", "status", "result", "what", "how", "why", "explain",
+        ]
+        for pattern in conversation_patterns:
+            if pattern in request_lower:
+                # 进一步检查：如果输入很短，很可能是对话追问
+                if len(request_lower) < 30:
+                    return False
+        
+        # 规则 3: 过短的输入，不创建（可能是误触或简单对话）
+        if len(request_lower) < 10:
+            return False
+        
+        # 规则 4: 纯标点或数字，不创建
+        if not any(c.isalpha() for c in request_lower):
+            return False
+        
+        try:
+            need = await self.analyzer.analyze(user_request, existing_skills)
+            # 如果不能使用现有技能，则需要进化
+            return not need.can_use_existing
+        except Exception:
+            # 分析失败时保守处理，允许进化
+            return True
+    
     async def quick_create(
         self,
         skill_name: str,
@@ -290,7 +375,7 @@ class SkillEvolutionEngine:
         design = await self.designer.design(need, [])
         
         # 生成
-        generated_files = self.generator.generate(design, self.skills_dir)
+        generated_files = await self.generator.generate(design, self.skills_dir)
         skill_path = self.skills_dir / design.name
         
         # 验证

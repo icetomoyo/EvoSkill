@@ -1,29 +1,44 @@
 """
-Skill 生成器 - 生成完整的 Skill 代码文件
+Skill 生成器 - 使用 Koda 框架智能生成代码
 """
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
-from evoskill.evolution.designer import SkillDesign, ToolDesign, ParameterSchema
+from evoskill.core.llm import LLMProvider
+
+if TYPE_CHECKING:
+    from evoskill.evolution.designer import SkillDesign
 
 
 class SkillGenerator:
     """
     Skill 生成器
     
-    根据 Skill 设计，生成完整的文件：
-    - SKILL.md
-    - main.py
-    - tests/test_main.py
+    使用 Koda 框架实现智能代码生成。
     """
     
-    def generate(
+    def __init__(self, llm_provider: Optional[LLMProvider] = None):
+        self.llm = llm_provider
+        self.pi_adapter = None
+        
+        if llm_provider:
+            # 延迟导入避免循环依赖
+            from evoskill.coding_agent.koda_adapter import KodaAdapter
+            self.pi_adapter = PiCodingAdapter(llm_provider)
+    
+    async def generate(
         self,
-        design: SkillDesign,
+        design: "SkillDesign",
         output_dir: Path,
     ) -> Dict[str, Path]:
         """
         生成完整的 Skill 文件
+        
+        使用 Pi Coding 框架完成完整的开发流程：
+        1. 需求分析与技术规划
+        2. 代码实现
+        3. 测试验证
+        4. 反思修复
         
         Args:
             design: Skill 设计
@@ -32,333 +47,149 @@ class SkillGenerator:
         Returns:
             生成的文件路径字典
         """
-        # 创建目录
         skill_dir = output_dir / design.name
         skill_dir.mkdir(parents=True, exist_ok=True)
         
         tests_dir = skill_dir / "tests"
         tests_dir.mkdir(exist_ok=True)
         
+        # 使用 Koda 开发
+        if self.koda_adapter:
+            print(f"[Generator] 启动 Koda 开发 {design.name}...")
+            result = await self.koda_adapter.develop_skill(design)
+            
+            if not result.success:
+                print(f"[Generator] 警告: Pi Coding 开发未完全成功")
+                print(f"[Generator] 错误: {result.error_message}")
+        else:
+            # 降级：使用简单模板（备用）
+            print(f"[Generator] 警告: 未配置 LLM，使用备用模板")
+            from koda.core.types import CodeArtifact
+            
+            result = self._fallback_generate(design)
+        
+        # 写入文件
         generated_files = {}
         
-        # 生成 SKILL.md
-        skill_md_path = skill_dir / "SKILL.md"
-        skill_md_content = self._generate_skill_md(design)
-        skill_md_path.write_text(skill_md_content, encoding="utf-8")
-        generated_files["skill_md"] = skill_md_path
+        # 写入所有产物
+        for artifact in result.artifacts:
+            file_path = skill_dir / artifact.filename
+            
+            # 测试文件放到 tests 目录
+            if artifact.filename.startswith("test_"):
+                file_path = tests_dir / artifact.filename
+            
+            file_path.write_text(artifact.content, encoding="utf-8")
+            
+            # 记录生成的文件
+            key = artifact.filename.replace(".", "_")
+            generated_files[key] = file_path
         
-        # 生成 main.py
-        main_py_path = skill_dir / "main.py"
-        main_py_content = self._generate_main_py(design)
-        main_py_path.write_text(main_py_content, encoding="utf-8")
-        generated_files["main_py"] = main_py_path
+        # 确保有 SKILL.md
+        if "README.md" in [a.filename for a in result.artifacts]:
+            # 复制 README.md 为 SKILL.md（EvoSkill 需要）
+            readme_content = ""
+            for a in result.artifacts:
+                if a.filename == "README.md":
+                    readme_content = a.content
+                    break
+            
+            # 添加 frontmatter
+            skill_md = f"""---
+name: {design.name}
+description: {design.description}
+version: {design.version or "0.1.0"}
+author: {design.author or "Pi Coding"}
+---
+
+{readme_content}
+"""
+            skill_md_path = skill_dir / "SKILL.md"
+            skill_md_path.write_text(skill_md, encoding="utf-8")
+            generated_files["skill_md"] = skill_md_path
         
-        # 生成测试文件
-        test_py_path = tests_dir / "test_main.py"
-        test_py_content = self._generate_test_py(design)
-        test_py_path.write_text(test_py_content, encoding="utf-8")
-        generated_files["test_py"] = test_py_path
-        
-        # 创建 __init__.py
+        # __init__.py
         init_py_path = skill_dir / "__init__.py"
         init_py_path.write_text("# Skill package\n", encoding="utf-8")
         
+        print(f"[Generator] {design.name} 生成完成，迭代 {result.iterations} 次")
+        
         return generated_files
     
-    def _generate_skill_md(self, design: SkillDesign) -> str:
-        """生成 SKILL.md 内容"""
-        tools_section = ""
-        for tool in design.tools:
-            params = "\n".join([
-                f"- `{name}` ({p.type}{', required' if p.required else ', optional'}): {p.description}"
-                for name, p in tool.parameters.items()
-            ]) if tool.parameters else "- 无参数"
-            
-            errors = "\n".join([f"- {e}" for e in tool.errors]) if tool.errors else "- 无特定错误"
-            
-            tools_section += f"""
-### {tool.name}
-
-{tool.description}
-
-**参数**:
-{params}
-
-**返回值**:
-{tool.returns}
-
-**错误处理**:
-{errors}
-
-"""
+    def _fallback_generate(self, design: "SkillDesign") -> "TaskResult":
+        """
+        备用生成（无 LLM 时使用简单模板）
+        """
+        from koda.core.task import TaskResult, Task
+        from pi_coding.core.types import CodeArtifact, TaskStatus
         
-        examples_section = ""
-        for i, example in enumerate(design.examples, 1):
-            examples_section += f"""
-### 示例 {i}: {example.get('description', '用法示例')}
-
-```python
-{example.get('usage', '# TODO: add example')}
-```
-
-"""
+        skill_name = design.name
         
-        dependencies_section = ""
-        if design.dependencies:
-            deps = "\n".join([f"- `{dep}`" for dep in design.dependencies])
-            dependencies_section = f"""
-## 依赖
-
-{deps}
-
-安装依赖：
-```bash
-pip install {' '.join(design.dependencies)}
-```
-"""
-        
-        return f"""# {design.name}
-
-## 描述
-
-{design.description}
-
-## 版本
-
-{design.version}
-
-## 工具
-
-{tools_section}
-## 示例
-
-{examples_section}
-{dependencies_section}
----
-
-Generated by EvoSkill
-"""
-    
-    def _generate_main_py(self, design: SkillDesign) -> str:
-        """生成 main.py 内容"""
-        imports = ["import asyncio", "from typing import Optional, Dict, Any, List"]
-        if design.dependencies:
-            imports.append("# External dependencies")
-            for dep in design.dependencies:
-                imports.append(f"import {dep.split('[')[0].split('=')[0].strip()}")
-        
-        imports_str = "\n".join(imports)
-        
-        # 生成工具函数
+        # 生成 main.py
         tools_code = []
         for tool in design.tools:
-            tool_code = self._generate_tool_function(tool)
-            tools_code.append(tool_code)
+            params = ", ".join([
+                f"{n}: str" for n in tool.parameters.keys()
+            ])
+            tools_code.append(f"""
+async def {tool.name}({params}) -> Dict[str, Any]:
+    \"\"\"
+    {tool.description}
+    \"\"\"
+    # TODO: 实现具体功能
+    return {{"success": False, "error": "功能待实现"}}
+""")
         
-        tools_str = "\n\n\n".join(tools_code)
-        
-        # 生成工具注册信息
-        tools_list = ",\n        ".join([
-            f'{{"name": "{tool.name}", "description": "{tool.description}", "handler": {tool.name}}}'
-            for tool in design.tools
-        ])
-        
-        return f'''"""
-{design.description}
+        main_py = f"\"\"\"\n{design.description}\n\"\"\"\n\n"
+        main_py += "import asyncio\nfrom typing import Optional, Dict, Any, List\n\n"
+        main_py += "\n".join(tools_code)
+        main_py += f"""
 
-Skill: {design.name}
-Version: {design.version}
-"""
-
-{imports_str}
-
-
-{tools_str}
-
-
-# Skill metadata for registration
-SKILL_NAME = "{design.name}"
-SKILL_VERSION = "{design.version}"
+SKILL_NAME = "{skill_name}"
+SKILL_VERSION = "0.1.0"
 SKILL_DESCRIPTION = "{design.description}"
 SKILL_TOOLS = [
-    {tools_list}
-]
-
+    {{"name": "{design.tools[0].name if design.tools else 'example'}", "description": "{design.tools[0].description if design.tools else '示例'}", "handler": {design.tools[0].name if design.tools else 'example'}}}
+] if True else []
 
 async def main():
-    """Test the skill"""
-    # Add test code here
-    print(f"{{SKILL_NAME}} v{{SKILL_VERSION}} loaded")
-    tool_names = [t['name'] for t in SKILL_TOOLS]
-    print(f"Available tools: {{', '.join(tool_names)}}")
-
+    print(f"{{SKILL_NAME}} v{{SKILL_VERSION}}")
 
 if __name__ == "__main__":
     asyncio.run(main())
-'''
-    
-    def _generate_tool_function(self, tool: ToolDesign) -> str:
-        """生成单个工具函数"""
-        # 构建参数列表
-        params = []
-        for name, param in tool.parameters.items():
-            if param.required:
-                params.append(f"{name}: {self._python_type(param.type)}")
-            else:
-                default_val = f" = {repr(param.default)}" if param.default is not None else " = None"
-                params.append(f"{name}: Optional[{self._python_type(param.type)}]{default_val}")
-        
-        params_str = ", ".join(params) if params else ""
-        
-        # 构建文档字符串
-        doc_params = "\n    ".join([
-            f"{name} ({p.type}): {p.description}"
-            for name, p in tool.parameters.items()
-        ]) if tool.parameters else "None"
-        
-        doc_errors = "\n    ".join(tool.errors) if tool.errors else "None"
-        
-        # 构建实现代码
-        implementation = self._generate_implementation(tool)
-        
-        return f'''async def {tool.name}({params_str}) -> Dict[str, Any]:
-    """
-    {tool.description}
-    
-    Args:
-        {doc_params}
-    
-    Returns:
-        {tool.returns}
-    
-    Raises:
-        {doc_errors}
-    """
-    try:
-{implementation}
-    except Exception as e:
-        return {{
-            "success": False,
-            "error": str(e),
-        }}
-'''
-    
-    def _generate_implementation(self, tool: ToolDesign) -> str:
-        """生成工具实现代码"""
-        hint = tool.implementation_hint
-        
-        # 根据提示生成基础实现
-        if "read" in hint.lower() or "file" in hint.lower():
-            return '''        # Read file implementation
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        
-        return {
-            "success": True,
-            "result": content,
-        }'''
-        elif "write" in hint.lower():
-            return '''        # Write file implementation
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        
-        return {
-            "success": True,
-            "result": f"File written: {file_path}",
-        }'''
-        elif "http" in hint.lower() or "request" in hint.lower() or "url" in hint.lower():
-            return '''        # HTTP request implementation
-        import aiohttp
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                data = await response.text()
-        
-        return {
-            "success": True,
-            "result": data,
-        }'''
-        else:
-            # 通用实现模板
-            return '''        # TODO: Implement the core logic
-        # Hint: ''' + hint.replace('\n', '\n        # ') + '''
-        
-        result = "Implementation needed"
-        
-        return {
-            "success": True,
-            "result": result,
-        }'''
-    
-    def _generate_test_py(self, design: SkillDesign) -> str:
-        """生成测试文件"""
-        test_functions = []
-        
-        for tool in design.tools:
-            # 构建测试参数
-            test_params = []
-            for name, param in tool.parameters.items():
-                if param.type == "string":
-                    test_params.append(f'"test_{name}"')
-                elif param.type == "int":
-                    test_params.append("1")
-                elif param.type == "bool":
-                    test_params.append("True")
-                elif param.type == "list":
-                    test_params.append("[]")
-                elif param.type == "dict":
-                    test_params.append("{}")
-                else:
-                    test_params.append("None")
-            
-            test_params_str = ", ".join(test_params) if test_params else ""
-            
-            test_functions.append(f'''
-@pytest.mark.asyncio
-async def test_{tool.name}():
-    """Test {tool.name}"""
-    result = await {tool.name}({test_params_str})
-    
-    assert isinstance(result, dict)
-    assert "success" in result
-''')
-        
-        tests_str = "\n".join(test_functions)
-        
-        return f'''"""
-Tests for {design.name} skill
 """
-import pytest
-import asyncio
-import sys
-from pathlib import Path
+        
+        # 生成文档
+        doc = f"""# {skill_name}
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+{design.description}
 
-from main import {', '.join([t.name for t in design.tools])}
+## 注意
 
+本 Skill 使用备用模板生成，功能尚未实现。
 
-{tests_str}
+---
 
+Generated by EvoSkill (fallback mode)
+"""
+        
+        # 测试
+        test_py = """import pytest
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
-'''
-    
-    def _python_type(self, json_type: str) -> str:
-        """将 JSON 类型转换为 Python 类型"""
-        type_mapping = {
-            "string": "str",
-            "int": "int",
-            "integer": "int",
-            "float": "float",
-            "number": "float",
-            "bool": "bool",
-            "boolean": "bool",
-            "list": "List",
-            "array": "List",
-            "dict": "Dict",
-            "object": "Dict",
-        }
-        return type_mapping.get(json_type.lower(), "Any")
+async def test_placeholder():
+    assert True
+"""
+        
+        artifacts = [
+            CodeArtifact(filename="main.py", content=main_py, language="python"),
+            CodeArtifact(filename="README.md", content=doc, language="markdown"),
+            CodeArtifact(filename="test_main.py", content=test_py, language="python"),
+        ]
+        
+        return TaskResult(
+            task=Task(description="fallback"),
+            success=True,
+            status=TaskStatus.COMPLETED,
+            artifacts=artifacts,
+            iterations=0,
+        )

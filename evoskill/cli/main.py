@@ -184,20 +184,40 @@ async def _chat_async(workspace: Optional[Path], skills_dir: Optional[Path]):
                 elif cmd.startswith("create "):
                     skill_name = cmd[7:].strip()
                     if skill_name:
-                        await _create_skill(evolution, skill_name, existing_skills_info)
+                        # 实时获取最新的 skills 列表，避免重复创建
+                        current_skills_info = [
+                            {
+                                "name": skill.name,
+                                "description": skill.description,
+                                "tools": [{"name": t.name, "description": t.description} for t in skill.tools],
+                            }
+                            for skill in skill_loader.load_all_skills()
+                        ]
+                        await _create_skill(evolution, skill_name, current_skills_info)
+                        # 创建成功后重新加载 skills
+                        skill_loader.load_all_skills()
                     continue
                 
                 else:
                     console.print(f"[red]未知命令: /{cmd}[/red]")
                     continue
             
-            # 检查是否需要进化
-            if evolution.should_evolve(user_input, skill_loader.list_skills()):
+            # 检查是否需要进化（使用正确格式的 skills 信息）
+            current_skills_info = [
+                {
+                    "name": skill.name,
+                    "description": skill.description,
+                    "tools": [{"name": t.name, "description": t.description} for t in skill.tools],
+                }
+                for skill in skill_loader.load_all_skills()
+            ]
+            
+            if await evolution.should_evolve(user_input, current_skills_info):
                 console.print("[yellow]检测到新需求，正在创建 Skill...[/yellow]")
                 
                 async for event in evolution.evolve(
                     user_input,
-                    available_skills=skill_loader.list_skills()
+                    existing_skills=current_skills_info
                 ):
                     if event.type == EventType.SKILL_CREATED:
                         data = event.data
@@ -221,10 +241,43 @@ async def _chat_async(workspace: Optional[Path], skills_dir: Optional[Path]):
                     tool_name = event.data.get("tool_name", "")
                     console.print(f"\n[dim]▶ 使用工具: {tool_name}[/dim]")
                 elif event.type == EventType.TOOL_EXECUTION_END:
+                    from evoskill.core.types import ToolResult
+                    result_obj = event.data.get("result")
+                    
                     if event.data.get("is_error"):
                         console.print(f"[red][ERROR] 工具执行失败[/red]")
+                        if result_obj:
+                            if isinstance(result_obj, ToolResult):
+                                console.print(f"[red]  错误: {result_obj.content}[/red]")
+                            else:
+                                console.print(f"[red]  错误详情: {result_obj}[/red]")
                     else:
                         console.print(f"[dim][DONE] 工具执行完成[/dim]")
+                        
+                        # 解析并显示工具返回的结果
+                        if isinstance(result_obj, ToolResult):
+                            try:
+                                import json
+                                content = result_obj.content
+                                # 尝试解析 JSON
+                                if isinstance(content, str):
+                                    data = json.loads(content)
+                                    if isinstance(data, dict):
+                                        if data.get("success"):
+                                            result_data = data.get("result", "无数据")
+                                            console.print(f"\n[green]结果:[/green] {result_data}")
+                                        else:
+                                            error = data.get("error", "未知错误")
+                                            console.print(f"\n[yellow]警告:[/yellow] {error}")
+                                    else:
+                                        console.print(f"\n[dim]返回:[/dim] {content}")
+                                else:
+                                    console.print(f"\n[dim]返回:[/dim] {content}")
+                            except json.JSONDecodeError:
+                                # 非 JSON 结果直接显示
+                                console.print(f"\n[dim]返回:[/dim] {result_obj.content}")
+                            except Exception as e:
+                                console.print(f"\n[dim]返回:[/dim] {result_obj.content}")
                 elif event.type == EventType.CONTEXT_WARNING:
                     # 上下文警告（75% 阈值）
                     message = event.data.get("message", "")
