@@ -18,6 +18,8 @@ from koda.tools.edit_utils import (
     strip_bom, detect_line_ending, normalize_to_lf, restore_line_endings,
     fuzzy_find_with_replacement, count_occurrences, generate_diff
 )
+from koda.utils.image_resize import resize_image, format_dimension_note, PIL_AVAILABLE
+from koda.core.multimodal_types import ImageContent, TextContent
 
 
 @dataclass
@@ -163,16 +165,22 @@ class FileTool:
                 mime_type = detect_image_mime_type_from_magic(target)
                 
                 if mime_type:
-                    # 读取图片
+                    # 读取图片（Pi 方式）
                     with open(target, 'rb') as f:
                         image_bytes = f.read()
                     
                     base64_data = base64.b64encode(image_bytes).decode('utf-8')
                     
-                    # TODO: 实现图片调整大小
+                    # 图片调整大小（Pi 兼容：2000x2000, 4.5MB）
                     dimension_note = ""
-                    if auto_resize_images:
-                        pass
+                    if auto_resize_images and PIL_AVAILABLE:
+                        resized = resize_image(base64_data, mime_type)
+                        if resized.wasResized:
+                            base64_data = resized.data
+                            mime_type = resized.mimeType
+                            note = format_dimension_note(resized)
+                            if note:
+                                dimension_note = f"\n{note}"
                     
                     return ReadResult(
                         content=f"Read image file [{mime_type}]{dimension_note}",
@@ -434,3 +442,45 @@ class FileTool:
             return target.is_dir()
         except:
             return False
+    
+    def to_content_blocks(self, read_result: ReadResult) -> list:
+        """
+        Convert ReadResult to Pi-compatible content blocks for LLM
+        
+        Returns list of TextContent/ImageContent blocks
+        """
+        if read_result.is_image and read_result.image_data:
+            # Return text note + image
+            return [
+                TextContent(type="text", text=read_result.content),
+                ImageContent(
+                    type="image",
+                    data=read_result.image_data,
+                    mimeType=read_result.mime_type or "image/png"
+                )
+            ]
+        else:
+            # Return text only
+            return [TextContent(type="text", text=read_result.content)]
+
+
+# Convenience function for direct use
+async def read_file_for_llm(
+    path: str,
+    base_path: Path = None,
+    offset: int = None,
+    limit: int = None
+) -> list:
+    """
+    Read a file and return Pi-compatible content blocks
+    
+    Returns:
+        List of TextContent/ImageContent blocks ready for LLM
+    """
+    tool = FileTool(base_path)
+    result = await tool.read(path, offset=offset, limit=limit)
+    
+    if result.error:
+        return [TextContent(type="text", text=f"Error reading file: {result.error}")]
+    
+    return tool.to_content_blocks(result)
