@@ -4,10 +4,7 @@ Truncation utilities for tools
 Extends core truncation with tool-specific functions
 """
 from dataclasses import dataclass
-
-
-# Grep max line length (matching Pi)
-GREP_MAX_LINE_LENGTH = 500
+from koda.core.truncation import GREP_MAX_LINE_LENGTH
 
 
 @dataclass

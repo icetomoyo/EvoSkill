@@ -15,6 +15,9 @@ from typing import Optional
 DEFAULT_MAX_BYTES = 50 * 1024  # 50KB
 DEFAULT_MAX_LINES = 2000
 
+# Grep max line length
+GREP_MAX_LINE_LENGTH = 500
+
 
 def format_size(bytes_val: int) -> str:
     """Format bytes as human-readable size."""
@@ -40,6 +43,7 @@ class TruncationResult:
     first_line_exceeds_limit: bool = False
     max_lines: int = DEFAULT_MAX_LINES
     max_bytes: int = DEFAULT_MAX_BYTES
+    next_offset: int = 0
 
 
 def truncate_head(

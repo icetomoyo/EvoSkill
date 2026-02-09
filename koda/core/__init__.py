@@ -2,20 +2,28 @@
 Koda Core - 核心模块
 
 包含 Koda V2 的所有核心组件：
-- agent_v2: 主代理
+- agent_v2: 主代理 (Pi-compatible + Koda enhancements)
 - tree_session: 树状会话管理
 - extension_engine: 自扩展引擎
+- validator: 代码验证器 (Koda enhancement)
+- reflector: 代码反思器 (Koda enhancement)
 - system_prompt: 系统提示词构建器
 - truncation: 内容截断处理
-- types: 类型定义
 """
 
-from koda.core.agent_v2 import KodaAgentV2, KodaAgent, AgentConfig, ToolResult
+from koda.core.agent_v2 import (
+    KodaAgentV2, KodaAgent, AgentConfig, ToolResult, TaskResult
+)
 from koda.core.tree_session import (
     TreeSession, TreeSessionManager, SessionNode, NodeStatus,
 )
 from koda.core.extension_engine import (
     ExtensionEngine, SelfExtendingAgent, ExtensionInfo
+)
+from koda.core.validator import Validator, ValidationReport
+from koda.core.reflector import (
+    Reflector, ReflectionResult, ValidationReport as ReflectorValidationReport,
+    ExecutionResult, CodeArtifact
 )
 from koda.core.system_prompt import (
     SystemPromptBuilder, SystemPromptOptions,
@@ -33,6 +41,7 @@ __all__ = [
     "KodaAgent",
     "AgentConfig",
     "ToolResult",
+    "TaskResult",
     
     # Tree Session
     "TreeSession",
@@ -44,6 +53,14 @@ __all__ = [
     "ExtensionEngine",
     "SelfExtendingAgent",
     "ExtensionInfo",
+    
+    # Validation (Koda enhancements)
+    "Validator",
+    "ValidationReport",
+    "Reflector",
+    "ReflectionResult",
+    "ExecutionResult",
+    "CodeArtifact",
     
     # System Prompt
     "SystemPromptBuilder",

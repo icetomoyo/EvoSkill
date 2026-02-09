@@ -59,6 +59,9 @@ class Validator:
             
             if result.get("type") == "error":
                 errors.append(result.get("message", ""))
+                # Stop checking if syntax error found - other checks will fail on parse
+                if result.get("name") == "syntax":
+                    break
             elif result.get("type") == "warning":
                 warnings.append(result.get("message", ""))
         
