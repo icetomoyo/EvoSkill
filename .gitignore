@@ -59,3 +59,7 @@ models/
 
 # Skill development
 skills/*/test_output/
+
+# External source references
+pi_mono_source/
+fetched_sources/
