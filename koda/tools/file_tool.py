@@ -2,16 +2,22 @@
 File Tool - 文件操作工具
 
 Pi-compatible 文件操作：
-- read: 读取文件内容，支持 offset/limit
+- read: 读取文件内容，支持 offset/limit，支持图片
 - write: 写入文件，自动创建目录
-- edit: 精确文本替换编辑
+- edit: 精确文本替换编辑，支持 BOM、行尾、模糊匹配
 """
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 from pathlib import Path
+import base64
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
-from koda.core.truncation import truncate_for_read
+from koda.core.truncation import truncate_head, format_size
+from koda.tools.edit_utils import (
+    strip_bom, detect_line_ending, normalize_to_lf, restore_line_endings,
+    fuzzy_find_text, count_occurrences, generate_diff
+)
 
 
 @dataclass
@@ -23,6 +29,9 @@ class ReadResult:
     end_line: int
     truncated: bool
     next_offset: int
+    is_image: bool = False
+    image_data: Optional[str] = None  # base64 encoded
+    mime_type: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -31,6 +40,8 @@ class EditResult:
     """编辑结果"""
     success: bool
     path: str
+    diff: Optional[str] = None
+    first_changed_line: Optional[int] = None
     error: Optional[str] = None
 
 
@@ -39,7 +50,24 @@ class WriteResult:
     """写入结果"""
     success: bool
     path: str
+    bytes_written: int = 0
     error: Optional[str] = None
+
+
+# 支持的图片类型
+SUPPORTED_IMAGE_TYPES = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+}
+
+
+def detect_image_mime_type(path: str) -> Optional[str]:
+    """检测图片 MIME 类型"""
+    ext = Path(path).suffix.lower()
+    return SUPPORTED_IMAGE_TYPES.get(ext)
 
 
 class FileTool:
@@ -47,13 +75,14 @@ class FileTool:
     Pi-compatible 文件工具
     
     支持：
-    - 读取（带 offset/limit）
+    - 读取（带 offset/limit，支持图片）
     - 写入（自动创建目录）
-    - 编辑（精确文本替换）
+    - 编辑（精确文本替换 + 模糊匹配 + BOM/行尾处理）
     """
     
     def __init__(self, base_path: Path = None):
         self.base_path = Path(base_path) if base_path else Path.cwd()
+        self._executor = ThreadPoolExecutor(max_workers=4)
     
     def _resolve_path(self, path: str) -> Path:
         """解析路径"""
@@ -67,87 +96,151 @@ class FileTool:
         path: str,
         offset: Optional[int] = None,
         limit: Optional[int] = None,
+        auto_resize_images: bool = True,
     ) -> ReadResult:
         """
-        读取文件内容
+        读取文件内容（Pi-compatible）
         
         Args:
             path: 文件路径
             offset: 起始行号（1-indexed）
             limit: 最大读取行数
+            auto_resize_images: 是否自动调整图片大小
             
         Returns:
             ReadResult
         """
-        try:
-            target = self._resolve_path(path)
-            
-            if not target.exists():
+        def _read():
+            try:
+                target = self._resolve_path(path)
+                
+                if not target.exists():
+                    return ReadResult(
+                        content="",
+                        path=str(target),
+                        start_line=0,
+                        end_line=0,
+                        truncated=False,
+                        next_offset=0,
+                        error=f"File not found: {path}"
+                    )
+                
+                if not target.is_file():
+                    return ReadResult(
+                        content="",
+                        path=str(target),
+                        start_line=0,
+                        end_line=0,
+                        truncated=False,
+                        next_offset=0,
+                        error=f"Not a file: {path}"
+                    )
+                
+                # 检测是否是图片
+                mime_type = detect_image_mime_type(str(target))
+                
+                if mime_type:
+                    # 读取图片
+                    with open(target, 'rb') as f:
+                        image_bytes = f.read()
+                    
+                    base64_data = base64.b64encode(image_bytes).decode('utf-8')
+                    
+                    # TODO: 实现图片调整大小
+                    dimension_note = ""
+                    if auto_resize_images:
+                        pass
+                    
+                    return ReadResult(
+                        content=f"Read image file [{mime_type}]{dimension_note}",
+                        path=str(target),
+                        start_line=0,
+                        end_line=0,
+                        truncated=False,
+                        next_offset=0,
+                        is_image=True,
+                        image_data=base64_data,
+                        mime_type=mime_type,
+                    )
+                
+                # 读取文本文件
+                with open(target, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
+                
+                # 处理 offset 和 limit
+                lines = content.split('\n')
+                total_lines = len(lines)
+                
+                # 计算起始和结束
+                start_idx = max(0, (offset or 1) - 1)  # offset 是 1-indexed
+                
+                # 检查 offset 是否超出范围
+                if start_idx >= total_lines:
+                    return ReadResult(
+                        content=f"",
+                        path=str(target),
+                        start_line=0,
+                        end_line=0,
+                        truncated=False,
+                        next_offset=0,
+                        error=f"Offset {offset} is beyond end of file ({total_lines} lines total)"
+                    )
+                
+                end_idx = total_lines
+                
+                if limit is not None:
+                    end_idx = min(start_idx + limit, total_lines)
+                
+                # 提取内容
+                selected_lines = lines[start_idx:end_idx]
+                selected_content = '\n'.join(selected_lines)
+                
+                # 应用截断
+                truncated_result = truncate_head(selected_content)
+                
+                # 计算实际行号
+                actual_start = start_idx + 1  # 1-indexed
+                actual_end = start_idx + truncated_result.output_lines
+                
+                # 构建输出
+                output_text = truncated_result.content
+                
+                if truncated_result.first_line_exceeds_limit:
+                    first_line_size = len(lines[start_idx].encode('utf-8'))
+                    output_text = f"[Line {actual_start} is {format_size(first_line_size)}, exceeds limit. Use bash: sed -n '{actual_start}p' {path} | head -c {truncated_result.max_bytes}]"
+                elif truncated_result.truncated:
+                    next_offset = actual_end + 1
+                    if truncated_result.truncated_by == "lines":
+                        output_text += f"\n\n[Showing lines {actual_start}-{actual_end} of {total_lines}. Use offset={next_offset} to continue.]"
+                    else:
+                        output_text += f"\n\n[Showing lines {actual_start}-{actual_end} of {total_lines} (limit). Use offset={next_offset} to continue.]"
+                elif limit is not None and end_idx < total_lines:
+                    remaining = total_lines - end_idx
+                    next_offset = end_idx + 1
+                    output_text += f"\n\n[{remaining} more lines in file. Use offset={next_offset} to continue.]"
+                
+                return ReadResult(
+                    content=output_text,
+                    path=str(target),
+                    start_line=actual_start,
+                    end_line=actual_end,
+                    truncated=truncated_result.truncated,
+                    next_offset=actual_end + 1 if truncated_result.truncated else 0,
+                )
+                
+            except Exception as e:
                 return ReadResult(
                     content="",
-                    path=str(target),
+                    path=path,
                     start_line=0,
                     end_line=0,
                     truncated=False,
                     next_offset=0,
-                    error=f"File not found: {path}"
+                    error=str(e)
                 )
-            
-            if not target.is_file():
-                return ReadResult(
-                    content="",
-                    path=str(target),
-                    start_line=0,
-                    end_line=0,
-                    truncated=False,
-                    next_offset=0,
-                    error=f"Not a file: {path}"
-                )
-            
-            # 读取内容
-            content = target.read_text(encoding='utf-8', errors='replace')
-            
-            # 处理 offset 和 limit
-            lines = content.split('\n')
-            total_lines = len(lines)
-            
-            # 计算起始和结束
-            start_idx = max(0, (offset or 1) - 1)  # offset 是 1-indexed
-            end_idx = total_lines
-            
-            if limit is not None:
-                end_idx = min(start_idx + limit, total_lines)
-            
-            # 提取内容
-            selected_lines = lines[start_idx:end_idx]
-            selected_content = '\n'.join(selected_lines)
-            
-            # 应用截断
-            truncated_result = truncate_for_read(selected_content, offset=1, limit=None)
-            
-            # 计算实际行号
-            actual_start = start_idx + 1  # 1-indexed
-            actual_end = start_idx + truncated_result.output_lines
-            
-            return ReadResult(
-                content=truncated_result.content,
-                path=str(target),
-                start_line=actual_start,
-                end_line=actual_end,
-                truncated=truncated_result.truncated,
-                next_offset=actual_end + 1 if truncated_result.truncated else 0,
-            )
-            
-        except Exception as e:
-            return ReadResult(
-                content="",
-                path=path,
-                start_line=0,
-                end_line=0,
-                truncated=False,
-                next_offset=0,
-                error=str(e)
-            )
+        
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, _read)
     
     async def write(self, path: str, content: str) -> WriteResult:
         """
@@ -160,26 +253,34 @@ class FileTool:
         Returns:
             WriteResult
         """
-        try:
-            target = self._resolve_path(path)
-            
-            # 创建父目录
-            target.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 写入文件
-            target.write_text(content, encoding='utf-8')
-            
-            return WriteResult(
-                success=True,
-                path=str(target),
-            )
-            
-        except Exception as e:
-            return WriteResult(
-                success=False,
-                path=path,
-                error=str(e)
-            )
+        def _write():
+            try:
+                target = self._resolve_path(path)
+                
+                # 创建父目录
+                target.parent.mkdir(parents=True, exist_ok=True)
+                
+                # 写入文件
+                with open(target, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                
+                bytes_written = len(content.encode('utf-8'))
+                
+                return WriteResult(
+                    success=True,
+                    path=str(target),
+                    bytes_written=bytes_written,
+                )
+                
+            except Exception as e:
+                return WriteResult(
+                    success=False,
+                    path=path,
+                    error=str(e)
+                )
+        
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, _write)
     
     async def edit(
         self,
@@ -188,56 +289,119 @@ class FileTool:
         new_text: str,
     ) -> EditResult:
         """
-        编辑文件 - 精确文本替换
+        编辑文件 - Pi-compatible 实现
         
-        old_text 必须精确匹配（包括空白字符和缩进）
+        特性：
+        - BOM 处理
+        - 行尾检测和保留
+        - 模糊匹配回退
+        - 多 occurrences 检测
+        - Diff 生成
         
         Args:
             path: 文件路径
-            old_text: 要替换的文本（精确匹配）
+            old_text: 要替换的文本（精确匹配优先）
             new_text: 新文本
             
         Returns:
             EditResult
         """
-        try:
-            target = self._resolve_path(path)
-            
-            if not target.exists():
+        def _edit():
+            try:
+                target = self._resolve_path(path)
+                
+                if not target.exists():
+                    return EditResult(
+                        success=False,
+                        path=str(target),
+                        error=f"File not found: {path}"
+                    )
+                
+                # 读取文件
+                with open(target, 'r', encoding='utf-8', errors='replace') as f:
+                    raw_content = f.read()
+                
+                # 1. 处理 BOM
+                bom_result = strip_bom(raw_content)
+                bom = bom_result.bom
+                content = bom_result.text
+                
+                # 2. 检测并保存原始行尾
+                original_ending = detect_line_ending(content)
+                
+                # 3. 规范化到 LF 进行匹配
+                normalized_content = normalize_to_lf(content)
+                normalized_old_text = normalize_to_lf(old_text)
+                normalized_new_text = normalize_to_lf(new_text)
+                
+                # 4. 检测多 occurrences（使用模糊匹配逻辑）
+                occurrences = count_occurrences(normalized_content, normalized_old_text)
+                if occurrences > 1:
+                    return EditResult(
+                        success=False,
+                        path=str(target),
+                        error=f"Found {occurrences} occurrences of the text in {path}. The text must be unique. Please provide more context to make it unique."
+                    )
+                
+                # 5. 模糊查找文本
+                match_result = fuzzy_find_text(normalized_content, normalized_old_text)
+                
+                if not match_result.found:
+                    return EditResult(
+                        success=False,
+                        path=str(target),
+                        error=f"Could not find the exact text in {path}. The old text must match exactly including all whitespace and newlines."
+                    )
+                
+                # 6. 执行替换
+                base_content = match_result.content_for_replacement
+                
+                # 如果使用了模糊匹配，需要特殊处理
+                if match_result.match_length == len(normalized_content):
+                    # 模糊匹配，替换整个内容
+                    new_content = normalized_new_text
+                else:
+                    # 精确匹配
+                    new_content = (
+                        base_content[:match_result.index] +
+                        normalized_new_text +
+                        base_content[match_result.index + match_result.match_length:]
+                    )
+                
+                # 7. 验证替换是否产生了变化
+                if base_content == new_content:
+                    return EditResult(
+                        success=False,
+                        path=str(target),
+                        error=f"No changes made to {path}. The replacement produced identical content."
+                    )
+                
+                # 8. 恢复行尾和 BOM
+                final_content = bom + restore_line_endings(new_content, original_ending)
+                
+                # 9. 写回文件
+                with open(target, 'w', encoding='utf-8') as f:
+                    f.write(final_content)
+                
+                # 10. 生成 diff
+                diff_result = generate_diff(base_content, new_content)
+                
+                return EditResult(
+                    success=True,
+                    path=str(target),
+                    diff=diff_result.diff,
+                    first_changed_line=diff_result.first_changed_line,
+                )
+                
+            except Exception as e:
                 return EditResult(
                     success=False,
-                    path=str(target),
-                    error=f"File not found: {path}"
+                    path=path,
+                    error=str(e)
                 )
-            
-            # 读取内容
-            content = target.read_text(encoding='utf-8', errors='replace')
-            
-            # 精确匹配替换
-            if old_text not in content:
-                return EditResult(
-                    success=False,
-                    path=str(target),
-                    error=f"old_text not found in file (must match exactly, including whitespace)"
-                )
-            
-            # 替换（只替换第一次出现）
-            new_content = content.replace(old_text, new_text, 1)
-            
-            # 写回文件
-            target.write_text(new_content, encoding='utf-8')
-            
-            return EditResult(
-                success=True,
-                path=str(target),
-            )
-            
-        except Exception as e:
-            return EditResult(
-                success=False,
-                path=path,
-                error=str(e)
-            )
+        
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, _edit)
     
     async def exists(self, path: str) -> bool:
         """检查文件是否存在"""

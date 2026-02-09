@@ -1,33 +1,45 @@
 """
-Truncation - 内容截断处理
+Truncation - Content truncation handling
 
-实现 Pi Coding Agent 的截断策略：
-- 50KB / 2000行 限制
-- 头部截断（保留开头）- 用于文件读取
-- 尾部截断（保留末尾）- 用于命令输出
+Pi Coding Agent compatible implementation:
+- 50KB / 2000 lines limits
+- Head truncation (for file reads)
+- Tail truncation (for bash output)
+- Multi-byte UTF-8 handling
 """
 from dataclasses import dataclass
 from typing import Optional
 
 
-# 默认限制
+# Default limits (matching Pi)
 DEFAULT_MAX_BYTES = 50 * 1024  # 50KB
 DEFAULT_MAX_LINES = 2000
 
 
+def format_size(bytes_val: int) -> str:
+    """Format bytes as human-readable size."""
+    if bytes_val < 1024:
+        return f"{bytes_val}B"
+    elif bytes_val < 1024 * 1024:
+        return f"{bytes_val / 1024:.1f}KB"
+    else:
+        return f"{bytes_val / (1024 * 1024):.1f}MB"
+
+
 @dataclass
 class TruncationResult:
-    """截断结果"""
+    """Truncation result - Pi compatible"""
     content: str
     truncated: bool
     truncated_by: Optional[str]  # "lines", "bytes", or None
     total_lines: int
-    output_lines: int
     total_bytes: int
+    output_lines: int
     output_bytes: int
-    first_line_exceeds_limit: bool = False
     last_line_partial: bool = False
-    next_offset: int = 0  # 用于继续读取
+    first_line_exceeds_limit: bool = False
+    max_lines: int = DEFAULT_MAX_LINES
+    max_bytes: int = DEFAULT_MAX_BYTES
 
 
 def truncate_head(
@@ -36,114 +48,77 @@ def truncate_head(
     max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> TruncationResult:
     """
-    头部截断 - 保留开头
+    Head truncation - keep beginning of content
     
-    用于文件读取、搜索结果等场景。
-    保留内容的开头部分，超出部分截断。
-    
-    Args:
-        content: 原始内容
-        max_lines: 最大行数
-        max_bytes: 最大字节数
-        
-    Returns:
-        TruncationResult
+    Used for file reads.
+    Never returns partial lines.
     """
+    total_bytes = len(content.encode('utf-8'))
     lines = content.split('\n')
     total_lines = len(lines)
-    total_bytes = len(content.encode('utf-8'))
     
-    # 检查是否需要截断
+    # No truncation needed
     if total_lines <= max_lines and total_bytes <= max_bytes:
         return TruncationResult(
             content=content,
             truncated=False,
             truncated_by=None,
             total_lines=total_lines,
+            total_bytes=total_bytes,
             output_lines=total_lines,
-            total_bytes=total_bytes,
             output_bytes=total_bytes,
-            next_offset=0,
+            max_lines=max_lines,
+            max_bytes=max_bytes,
         )
     
-    # 检查首行是否超过限制（单行长文本）
-    if lines:
-        first_line_bytes = len(lines[0].encode('utf-8'))
-        if first_line_bytes > max_bytes:
-            # 截取首行的一部分
-            truncated_first = lines[0][:max_bytes // 4]  # 粗略估计
-            return TruncationResult(
-                content=truncated_first,
-                truncated=True,
-                truncated_by="bytes",
-                total_lines=total_lines,
-                output_lines=1,
-                total_bytes=total_bytes,
-                output_bytes=max_bytes,
-                first_line_exceeds_limit=True,
-                next_offset=2,  # 从第2行继续
-            )
-    
-    # 按行截断
-    if total_lines > max_lines:
-        output_lines = lines[:max_lines]
-        content_str = '\n'.join(output_lines)
-        output_bytes = len(content_str.encode('utf-8'))
-        
-        # 计算 next_offset
-        end_line = max_lines
-        next_offset = end_line + 1
-        
+    # Check if first line alone exceeds byte limit
+    first_line_bytes = len(lines[0].encode('utf-8'))
+    if first_line_bytes > max_bytes:
         return TruncationResult(
-            content=content_str,
-            truncated=True,
-            truncated_by="lines",
-            total_lines=total_lines,
-            output_lines=max_lines,
-            total_bytes=total_bytes,
-            output_bytes=output_bytes,
-            next_offset=next_offset,
-        )
-    
-    # 按字节截断（在不超过行数限制的情况下）
-    if total_bytes > max_bytes:
-        bytes_count = 0
-        line_count = 0
-        
-        for i, line in enumerate(lines):
-            line_bytes = len(line.encode('utf-8')) + 1  # +1 for newline
-            if bytes_count + line_bytes > max_bytes:
-                break
-            bytes_count += line_bytes
-            line_count = i + 1
-        
-        output_lines = lines[:line_count]
-        content_str = '\n'.join(output_lines)
-        
-        # 计算 next_offset
-        next_offset = line_count + 1
-        
-        return TruncationResult(
-            content=content_str,
+            content="",
             truncated=True,
             truncated_by="bytes",
             total_lines=total_lines,
-            output_lines=line_count,
             total_bytes=total_bytes,
-            output_bytes=bytes_count,
-            next_offset=next_offset,
+            output_lines=0,
+            output_bytes=0,
+            first_line_exceeds_limit=True,
+            max_lines=max_lines,
+            max_bytes=max_bytes,
         )
     
-    # 不应该到达这里
+    # Collect complete lines that fit
+    output_lines_arr = []
+    output_bytes_count = 0
+    truncated_by = "lines"
+    
+    for i, line in enumerate(lines):
+        if i >= max_lines:
+            truncated_by = "lines"
+            break
+        
+        line_bytes = len(line.encode('utf-8')) + (1 if i > 0 else 0)  # +1 for newline
+        
+        if output_bytes_count + line_bytes > max_bytes:
+            truncated_by = "bytes"
+            break
+        
+        output_lines_arr.append(line)
+        output_bytes_count += line_bytes
+    
+    output_content = '\n'.join(output_lines_arr)
+    final_output_bytes = len(output_content.encode('utf-8'))
+    
     return TruncationResult(
-        content=content,
-        truncated=False,
-        truncated_by=None,
+        content=output_content,
+        truncated=True,
+        truncated_by=truncated_by,
         total_lines=total_lines,
-        output_lines=total_lines,
         total_bytes=total_bytes,
-        output_bytes=total_bytes,
-        next_offset=0,
+        output_lines=len(output_lines_arr),
+        output_bytes=final_output_bytes,
+        max_lines=max_lines,
+        max_bytes=max_bytes,
     )
 
 
@@ -153,165 +128,124 @@ def truncate_tail(
     max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> TruncationResult:
     """
-    尾部截断 - 保留末尾
+    Tail truncation - keep end of content
     
-    用于命令输出、日志等场景。
-    保留内容的最后部分（通常是更重要的）。
-    
-    Args:
-        content: 原始内容
-        max_lines: 最大行数
-        max_bytes: 最大字节数
-        
-    Returns:
-        TruncationResult
+    Used for bash output.
+    May return partial first line if last line exceeds byte limit.
     """
+    total_bytes = len(content.encode('utf-8'))
     lines = content.split('\n')
     total_lines = len(lines)
-    total_bytes = len(content.encode('utf-8'))
     
-    # 检查是否需要截断
+    # No truncation needed
     if total_lines <= max_lines and total_bytes <= max_bytes:
         return TruncationResult(
             content=content,
             truncated=False,
             truncated_by=None,
             total_lines=total_lines,
+            total_bytes=total_bytes,
             output_lines=total_lines,
-            total_bytes=total_bytes,
             output_bytes=total_bytes,
-            next_offset=0,
+            max_lines=max_lines,
+            max_bytes=max_bytes,
         )
     
-    # 按行截断（从末尾开始）
-    if total_lines > max_lines:
-        start_idx = total_lines - max_lines
-        output_lines = lines[start_idx:]
-        content_str = '\n'.join(output_lines)
-        output_bytes = len(content_str.encode('utf-8'))
-        
-        # 计算起始行号（用于提示）
-        start_line_num = start_idx + 1  # 1-indexed
-        
-        return TruncationResult(
-            content=content_str,
-            truncated=True,
-            truncated_by="lines",
-            total_lines=total_lines,
-            output_lines=max_lines,
-            total_bytes=total_bytes,
-            output_bytes=output_bytes,
-            next_offset=start_line_num,
-        )
+    # Work backwards from the end
+    output_lines_arr = []
+    output_bytes_count = 0
+    truncated_by = "lines"
+    last_line_partial = False
     
-    # 按字节截断（从末尾开始）
-    if total_bytes > max_bytes:
-        # 从末尾开始累加
-        bytes_count = 0
-        line_count = 0
+    for i in range(len(lines) - 1, -1, -1):
+        if len(output_lines_arr) >= max_lines:
+            truncated_by = "lines"
+            break
         
-        for i in range(len(lines) - 1, -1, -1):
-            line = lines[i]
-            line_bytes = len(line.encode('utf-8')) + 1  # +1 for newline
-            
-            if bytes_count + line_bytes > max_bytes:
-                break
-            
-            bytes_count += line_bytes
-            line_count += 1
+        line = lines[i]
+        line_bytes = len(line.encode('utf-8')) + (1 if output_lines_arr else 0)
         
-        start_idx = len(lines) - line_count
-        output_lines = lines[start_idx:]
-        content_str = '\n'.join(output_lines)
+        if output_bytes_count + line_bytes > max_bytes:
+            truncated_by = "bytes"
+            # Edge case: if we haven't added ANY lines yet and this line exceeds maxBytes,
+            # take the end of the line (partial)
+            if not output_lines_arr:
+                truncated_line = _truncate_string_to_bytes_from_end(line, max_bytes)
+                output_lines_arr.insert(0, truncated_line)
+                output_bytes_count = len(truncated_line.encode('utf-8'))
+                last_line_partial = True
+            break
         
-        start_line_num = start_idx + 1
-        
-        return TruncationResult(
-            content=content_str,
-            truncated=True,
-            truncated_by="bytes",
-            total_lines=total_lines,
-            output_lines=line_count,
-            total_bytes=total_bytes,
-            output_bytes=bytes_count,
-            next_offset=start_line_num,
-        )
+        output_lines_arr.insert(0, line)
+        output_bytes_count += line_bytes
+    
+    output_content = '\n'.join(output_lines_arr)
+    final_output_bytes = len(output_content.encode('utf-8'))
     
     return TruncationResult(
-        content=content,
-        truncated=False,
-        truncated_by=None,
+        content=output_content,
+        truncated=True,
+        truncated_by=truncated_by,
         total_lines=total_lines,
-        output_lines=total_lines,
         total_bytes=total_bytes,
-        output_bytes=total_bytes,
-        next_offset=0,
+        output_lines=len(output_lines_arr),
+        output_bytes=final_output_bytes,
+        last_line_partial=last_line_partial,
+        max_lines=max_lines,
+        max_bytes=max_bytes,
     )
 
 
-def format_truncation_message(result: TruncationResult, mode: str = "head") -> str:
+def _truncate_string_to_bytes_from_end(s: str, max_bytes: int) -> str:
     """
-    格式化截断提示信息
+    Truncate a string from the end to fit within byte limit.
+    Handles multi-byte UTF-8 characters correctly.
+    """
+    encoded = s.encode('utf-8')
+    if len(encoded) <= max_bytes:
+        return s
     
-    Args:
-        result: 截断结果
-        mode: "head" 或 "tail"
-        
-    Returns:
-        提示信息
-    """
+    # Start from the end, skip max_bytes back
+    start = len(encoded) - max_bytes
+    
+    # Find a valid UTF-8 boundary (start of a character)
+    # UTF-8 continuation bytes start with 10xxxxxx (0x80-0xBF)
+    while start < len(encoded) and (encoded[start] & 0xC0) == 0x80:
+        start += 1
+    
+    return encoded[start:].decode('utf-8')
+
+
+def format_truncation_message(result: TruncationResult, mode: str = "head") -> str:
+    """Format truncation notice message"""
     if not result.truncated:
         return ""
     
     if mode == "head":
-        # 头部截断提示
         if result.truncated_by == "lines":
-            return (
-                f"\n\n[Showing lines 1-{result.output_lines} of {result.total_lines}. "
-                f"Use offset={result.next_offset} to continue.]"
-            )
+            return f"[Showing lines 1-{result.output_lines} of {result.total_lines}. Use offset={result.output_lines + 1} to continue.]"
         elif result.truncated_by == "bytes":
-            return (
-                f"\n\n[Showing {result.output_bytes // 1024}KB of {result.total_bytes // 1024}KB. "
-                f"Use offset={result.next_offset} to continue.]"
-            )
+            return f"[Showing {format_size(result.output_bytes)} of {format_size(result.total_bytes)}. Use offset={result.output_lines + 1} to continue.]"
     else:
-        # 尾部截断提示
-        if result.truncated_by == "lines":
-            return (
-                f"\n\n[Showing lines {result.next_offset}-{result.total_lines} of {result.total_lines}. "
-                f"Full output in temporary file.]"
-            )
-        elif result.truncated_by == "bytes":
-            return (
-                f"\n\n[Showing last {result.output_bytes // 1024}KB of {result.total_bytes // 1024}KB. "
-                f"Full output in temporary file.]"
-            )
+        start_line = result.total_lines - result.output_lines + 1
+        if result.last_line_partial:
+            return f"[Showing last {format_size(result.output_bytes)} of line {result.total_lines}. Full output in temporary file.]"
+        elif result.truncated_by == "lines":
+            return f"[Showing lines {start_line}-{result.total_lines} of {result.total_lines}. Full output in temporary file.]"
+        else:
+            return f"[Showing lines {start_line}-{result.total_lines} of {result.total_lines} ({format_size(result.max_bytes)} limit). Full output in temporary file.]"
     
     return ""
 
 
-# 便捷函数
 def truncate_for_read(content: str, offset: int = 1, limit: Optional[int] = None) -> TruncationResult:
-    """
-    为文件读取截断
-    
-    应用 offset 和 limit，然后进行头部截断。
-    
-    Args:
-        content: 原始内容
-        offset: 起始行号（1-indexed）
-        limit: 限制行数
-        
-    Returns:
-        TruncationResult
-    """
+    """Truncate for file reading - applies offset and limit first, then head truncation"""
     lines = content.split('\n')
     
-    # 应用 offset（转为 0-indexed）
+    # Apply offset (convert to 0-indexed)
     start_idx = max(0, offset - 1)
     
-    # 应用 limit
+    # Apply limit
     if limit is not None:
         end_idx = min(start_idx + limit, len(lines))
         selected = lines[start_idx:end_idx]
@@ -320,10 +254,10 @@ def truncate_for_read(content: str, offset: int = 1, limit: Optional[int] = None
     
     content = '\n'.join(selected)
     
-    # 再进行头部截断
+    # Apply head truncation
     result = truncate_head(content)
     
-    # 调整行号统计
+    # Adjust line numbers
     if result.truncated:
         result.next_offset = start_idx + result.output_lines + 1
     
@@ -331,9 +265,5 @@ def truncate_for_read(content: str, offset: int = 1, limit: Optional[int] = None
 
 
 def truncate_for_bash(content: str) -> TruncationResult:
-    """
-    为命令输出截断
-    
-    使用尾部截断，保留最后部分。
-    """
+    """Truncate for bash output - uses tail truncation"""
     return truncate_tail(content)
