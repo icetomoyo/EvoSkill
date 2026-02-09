@@ -1,81 +1,13 @@
 """
-Koda Core - 核心模块
-
-包含 Koda V2 的所有核心组件：
-- agent_v2: 主代理 (Pi-compatible + Koda enhancements)
-- tree_session: 树状会话管理
-- extension_engine: 自扩展引擎
-- validator: 代码验证器 (Koda enhancement)
-- reflector: 代码反思器 (Koda enhancement)
-- system_prompt: 系统提示词构建器
-- truncation: 内容截断处理
+Koda Core - Pi Coding Agent 的 Python 实现
 """
-
-from koda.core.agent_v2 import (
-    KodaAgentV2, KodaAgent, AgentConfig, ToolResult, TaskResult
-)
-from koda.core.tree_session import (
-    TreeSession, TreeSessionManager, SessionNode, NodeStatus,
-)
-from koda.core.extension_engine import (
-    ExtensionEngine, SelfExtendingAgent, ExtensionInfo
-)
-from koda.core.validator import Validator, ValidationReport
-from koda.core.reflector import (
-    Reflector, ReflectionResult, ValidationReport as ReflectorValidationReport,
-    ExecutionResult, CodeArtifact
-)
-from koda.core.system_prompt import (
-    SystemPromptBuilder, SystemPromptOptions,
-    Skill, ContextFile, TOOL_DESCRIPTIONS
-)
-from koda.core.truncation import (
-    truncate_head, truncate_tail, truncate_for_read, truncate_for_bash,
-    TruncationResult, format_truncation_message,
-    DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES
-)
+from koda.core.agent import Agent, Session, Message, ToolCall, ToolResult, ToolDefinition
 
 __all__ = [
-    # Agent
-    "KodaAgentV2",
-    "KodaAgent",
-    "AgentConfig",
+    "Agent",
+    "Session", 
+    "Message",
+    "ToolCall",
     "ToolResult",
-    "TaskResult",
-    
-    # Tree Session
-    "TreeSession",
-    "TreeSessionManager",
-    "SessionNode",
-    "NodeStatus",
-    
-    # Extension
-    "ExtensionEngine",
-    "SelfExtendingAgent",
-    "ExtensionInfo",
-    
-    # Validation (Koda enhancements)
-    "Validator",
-    "ValidationReport",
-    "Reflector",
-    "ReflectionResult",
-    "ExecutionResult",
-    "CodeArtifact",
-    
-    # System Prompt
-    "SystemPromptBuilder",
-    "SystemPromptOptions",
-    "Skill",
-    "ContextFile",
-    "TOOL_DESCRIPTIONS",
-    
-    # Truncation
-    "truncate_head",
-    "truncate_tail",
-    "truncate_for_read",
-    "truncate_for_bash",
-    "TruncationResult",
-    "format_truncation_message",
-    "DEFAULT_MAX_BYTES",
-    "DEFAULT_MAX_LINES",
+    "ToolDefinition",
 ]

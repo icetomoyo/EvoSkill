@@ -6,7 +6,7 @@ Validator - 代码验证器
 import ast
 from typing import List, Dict, Any, Optional
 
-from koda.core.types import ExecutionResult, ValidationReport
+from evoskill.validation.types import ExecutionResult, ValidationReport
 
 
 class Validator:
