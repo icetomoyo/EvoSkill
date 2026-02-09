@@ -3,7 +3,7 @@ Tests for truncation module
 """
 import pytest
 
-from koda.core.truncation import (
+from koda.tools._support.truncation import (
     truncate_head,
     truncate_tail,
     truncate_for_read,

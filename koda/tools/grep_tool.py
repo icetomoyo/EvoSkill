@@ -10,8 +10,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict, Callable
 from pathlib import Path
 
-from koda.core.truncation import truncate_head, format_size, DEFAULT_MAX_BYTES, GREP_MAX_LINE_LENGTH
-from koda.tools.truncation import truncate_line
+from koda.tools._support.truncation import truncate_head, format_size, DEFAULT_MAX_BYTES, GREP_MAX_LINE_LENGTH
 
 
 @dataclass
