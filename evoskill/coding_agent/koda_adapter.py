@@ -53,7 +53,7 @@ class KodaAdapter:
     将 Koda 框架集成到 EvoSkill 的代码生成流程。
     
     Example:
-        adapter = PiCodingAdapter(llm_provider)
+        adapter = KodaAdapter(llm_provider)
         result = await adapter.develop_skill(skill_design)
         
         # 获取生成的文件

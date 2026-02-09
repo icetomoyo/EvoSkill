@@ -19,12 +19,12 @@ class SkillGenerator:
     
     def __init__(self, llm_provider: Optional[LLMProvider] = None):
         self.llm = llm_provider
-        self.pi_adapter = None
+        self.koda_adapter = None
         
         if llm_provider:
             # 延迟导入避免循环依赖
             from evoskill.coding_agent.koda_adapter import KodaAdapter
-            self.pi_adapter = PiCodingAdapter(llm_provider)
+            self.koda_adapter = KodaAdapter(llm_provider)
     
     async def generate(
         self,

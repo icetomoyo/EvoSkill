@@ -1,0 +1,95 @@
+# EvoSkill 配置文件
+# 放置位置: ~/.config/evoskill/config.yaml (Linux/Mac)
+#          %LOCALAPPDATA%/evoskill/config.yaml (Windows)
+# 优先级: 环境变量 > 本配置文件 > 默认值
+
+# ============================================
+# LLM 配置 (重要!)
+# ============================================
+
+# provider: API 提供商类型
+#   - openai      : OpenAI 或兼容 OpenAI API 格式的服务
+#   - anthropic   : Anthropic Claude 官方 API
+#   - kimi-coding : Kimi For Coding (需要特殊 User-Agent)
+#   - custom      : 其他自定义 API (需同时设置 base_url)
+provider: openai
+
+# model: 模型名称
+#   OpenAI: gpt-4o, gpt-4o-mini, gpt-4-turbo
+#   Kimi For Coding: k2p5 (需要 provider 设为 kimi-coding)
+#   Kimi 普通: moonshot-v1-8k, moonshot-v1-32k, moonshot-v1-128k
+#   OpenRouter: 参照 https://openrouter.ai/docs#models
+model: gpt-4o-mini
+
+# base_url: API 基础 URL (用于第三方代理)
+#   默认 (不设置): 使用官方 API 地址
+#   Kimi For Coding: https://api.kimi.com/coding/v1
+#   Kimi 普通: https://api.moonshot.cn/v1
+#   OpenRouter: https://openrouter.ai/api/v1
+#   SiliconFlow: https://api.siliconflow.cn/v1
+# base_url: https://api.kimi.com/coding/v1
+
+# api_key: API 密钥
+#   安全建议: 优先使用环境变量 EVOSKILL_API_KEY，而非写入此文件
+#   环境变量设置: export EVOSKILL_API_KEY=sk-xxxx (Linux/Mac)
+#                 set EVOSKILL_API_KEY=sk-xxxx (Windows CMD)
+# api_key: sk-xxxx
+
+# ============================================
+# 模型参数 (可选)
+# ============================================
+
+# temperature: 随机性 (0.0-2.0)
+#   0.0: 最确定，适合代码生成
+#   0.7: 平衡，适合一般对话
+#   1.0+: 更有创意，适合头脑风暴
+temperature: 0.7
+
+# max_tokens: 单次回复最大 token 数
+#   不设置则使用模型默认值
+# max_tokens: 4096
+
+# thinking_level: 思考级别 (仅 Claude 支持)
+#   - low    : 快速回答
+#   - medium : 平衡
+#   - high   : 深度思考
+# thinking_level: medium
+
+# ============================================
+# 路径配置 (可选)
+# ============================================
+
+# workspace: 默认工作目录
+#   不设置则使用当前目录
+# workspace: ~/projects
+
+# skills_dir: Skills 存储目录
+#   不设置则使用 <workspace>/.evoskill/skills/
+# skills_dir: ~/.evoskill/skills
+
+# sessions_dir: 会话存储目录
+#   不设置则使用 <workspace>/.evoskill/sessions/
+# sessions_dir: ~/.evoskill/sessions
+
+# ============================================
+# 上下文配置 (重要!)
+# ============================================
+
+# max_context_tokens: 最大上下文 token 数
+#   - 达到 75% 时发出警告
+#   - 达到 80% 时自动压缩历史对话
+#   - 建议根据模型上下文窗口设置:
+#     * Kimi K2.5 (256k): 设为 200000
+#     * Claude 3.5 (200k): 设为 160000
+#     * GPT-4o (128k): 设为 100000
+#     * GPT-4o-mini (128k): 设为 100000
+max_context_tokens: 128000
+
+# ============================================
+# 安全配置
+# ============================================
+
+# require_confirmation: 危险操作前是否询问确认
+#   true : 执行删除/覆盖/命令前询问用户 (推荐)
+#   false: 直接执行 (仅在信任环境中使用)
+require_confirmation: true
