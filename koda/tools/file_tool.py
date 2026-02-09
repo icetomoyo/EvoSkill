@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from koda.core.truncation import truncate_head, format_size
 from koda.tools.edit_utils import (
     strip_bom, detect_line_ending, normalize_to_lf, restore_line_endings,
-    fuzzy_find_text, count_occurrences, generate_diff
+    fuzzy_find_with_replacement, count_occurrences, generate_diff
 )
 
 
@@ -33,6 +33,11 @@ class ReadResult:
     image_data: Optional[str] = None  # base64 encoded
     mime_type: Optional[str] = None
     error: Optional[str] = None
+    
+    @property
+    def success(self) -> bool:
+        """是否成功（兼容 Pi 风格）"""
+        return self.error is None
 
 
 @dataclass
@@ -54,20 +59,38 @@ class WriteResult:
     error: Optional[str] = None
 
 
-# 支持的图片类型
-SUPPORTED_IMAGE_TYPES = {
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp',
-}
+# 图片文件魔数 (Magic Numbers)
+IMAGE_MAGIC_NUMBERS = [
+    (b'\x89PNG\r\n\x1a\n', 'image/png'),
+    (b'\xff\xd8\xff', 'image/jpeg'),  # JPEG/JPG
+    (b'GIF87a', 'image/gif'),
+    (b'GIF89a', 'image/gif'),
+    (b'RIFF', 'image/webp'),  # WebP starts with RIFF....WEBP
+]
 
 
-def detect_image_mime_type(path: str) -> Optional[str]:
-    """检测图片 MIME 类型"""
-    ext = Path(path).suffix.lower()
-    return SUPPORTED_IMAGE_TYPES.get(ext)
+def detect_image_mime_type_from_magic(file_path: Path) -> Optional[str]:
+    """
+    通过文件魔数检测图片 MIME 类型
+    
+    这是 Pi 的方式：通过文件内容检测，而不是扩展名。
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            header = f.read(32)  # 读取前32字节
+        
+        for magic, mime_type in IMAGE_MAGIC_NUMBERS:
+            if header.startswith(magic):
+                # 特殊处理 WebP
+                if mime_type == 'image/webp':
+                    if b'WEBP' in header[:12]:
+                        return mime_type
+                else:
+                    return mime_type
+        
+        return None
+    except Exception:
+        return None
 
 
 class FileTool:
@@ -136,8 +159,8 @@ class FileTool:
                         error=f"Not a file: {path}"
                     )
                 
-                # 检测是否是图片
-                mime_type = detect_image_mime_type(str(target))
+                # 检测是否是图片（通过文件魔数）
+                mime_type = detect_image_mime_type_from_magic(target)
                 
                 if mime_type:
                     # 读取图片
@@ -294,7 +317,7 @@ class FileTool:
         特性：
         - BOM 处理
         - 行尾检测和保留
-        - 模糊匹配回退
+        - 模糊匹配回退（包括 Unicode 规范化）
         - 多 occurrences 检测
         - Diff 生成
         
@@ -343,8 +366,12 @@ class FileTool:
                         error=f"Found {occurrences} occurrences of the text in {path}. The text must be unique. Please provide more context to make it unique."
                     )
                 
-                # 5. 模糊查找文本
-                match_result = fuzzy_find_text(normalized_content, normalized_old_text)
+                # 5. 模糊查找文本并准备替换（包括 Unicode 规范化、trailing whitespace 处理）
+                match_result = fuzzy_find_with_replacement(
+                    normalized_content, 
+                    normalized_old_text,
+                    normalized_new_text
+                )
                 
                 if not match_result.found:
                     return EditResult(
@@ -353,20 +380,9 @@ class FileTool:
                         error=f"Could not find the exact text in {path}. The old text must match exactly including all whitespace and newlines."
                     )
                 
-                # 6. 执行替换
+                # 6. 使用模糊匹配返回的替换内容
                 base_content = match_result.content_for_replacement
-                
-                # 如果使用了模糊匹配，需要特殊处理
-                if match_result.match_length == len(normalized_content):
-                    # 模糊匹配，替换整个内容
-                    new_content = normalized_new_text
-                else:
-                    # 精确匹配
-                    new_content = (
-                        base_content[:match_result.index] +
-                        normalized_new_text +
-                        base_content[match_result.index + match_result.match_length:]
-                    )
+                new_content = match_result.replacement
                 
                 # 7. 验证替换是否产生了变化
                 if base_content == new_content:
