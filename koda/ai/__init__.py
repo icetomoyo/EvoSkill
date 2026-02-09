@@ -1,43 +1,154 @@
 """
 Koda AI - Unified LLM Interface
 
-Supports 15+ providers: OpenAI, Anthropic, Google, Azure, 
-Bedrock, Mistral, Groq, Cerebras, xAI, OpenRouter, 
-Kimi For Coding, and custom providers.
+完全等效于 Pi Mono 的 packages/ai
+支持 20+ providers, OAuth, Streaming, Tools, Vision
 """
-from koda.ai.provider import LLMProvider, Message, Model, ToolCall, ToolResult
-from koda.ai.providers.openai_provider import OpenAIProvider
-from koda.ai.providers.anthropic_provider import AnthropicProvider
-from koda.ai.providers.kimi_provider import KimiProvider
-from koda.ai.factory import create_provider, list_supported_providers
+
+# 基础类型
+from koda.ai.types import (
+    # Enums
+    KnownApi,
+    KnownProvider,
+    ThinkingLevel,
+    CacheRetention,
+    StopReason,
+    # Content types
+    TextContent,
+    ThinkingContent,
+    ImageContent,
+    ToolCall,
+    Content,
+    # Message types
+    UserMessage,
+    AssistantMessage,
+    ToolResultMessage,
+    Message,
+    # Context and Tools
+    Tool,
+    Context,
+    Usage,
+    # Options
+    StreamOptions,
+    SimpleStreamOptions,
+    ThinkingBudgets,
+    OpenRouterRouting,
+    VercelGatewayRouting,
+    OpenAICompletionsCompat,
+    OpenAIResponsesCompat,
+    # Model
+    ModelInfo,
+    # Events
+    AssistantMessageEvent,
+    AgentEventType,
+    AgentEvent,
+    AgentTool,
+)
+
+# Provider 基础
+from koda.ai.provider_base import (
+    BaseProvider,
+    ProviderConfig,
+    ProviderRegistry,
+    get_provider_registry,
+)
+
+# Event Stream
+from koda.ai.event_stream import (
+    EventType,
+    AssistantMessageEventStream,
+    StreamBuffer,
+    create_event_stream,
+    stream_to_string,
+    stream_to_messages,
+)
+
+# Registry
 from koda.ai.registry import (
     ModelRegistry,
     ModelCapability,
-    ModelInfo,
     get_registry,
 )
 
+# Tokenizer
 try:
     from koda.ai.tokenizer import Tokenizer
     HAS_TOKENIZER = True
 except ImportError:
     HAS_TOKENIZER = False
 
+# Legacy providers (will be refactored)
+from koda.ai.providers.openai_provider import OpenAIProvider
+from koda.ai.providers.anthropic_provider import AnthropicProvider
+from koda.ai.providers.kimi_provider import KimiProvider
+
 __all__ = [
-    "LLMProvider",
-    "Message",
-    "Model",
+    # Enums
+    "KnownApi",
+    "KnownProvider",
+    "ThinkingLevel",
+    "CacheRetention",
+    "StopReason",
+    "EventType",
+    "AgentEventType",
+    
+    # Content
+    "TextContent",
+    "ThinkingContent", 
+    "ImageContent",
     "ToolCall",
-    "ToolResult",
+    "Content",
+    
+    # Messages
+    "UserMessage",
+    "AssistantMessage",
+    "ToolResultMessage",
+    "Message",
+    
+    # Context
+    "Tool",
+    "Context",
+    "Usage",
+    
+    # Options
+    "StreamOptions",
+    "SimpleStreamOptions",
+    "ThinkingBudgets",
+    "OpenRouterRouting",
+    "VercelGatewayRouting",
+    "OpenAICompletionsCompat",
+    "OpenAIResponsesCompat",
+    
+    # Model
+    "ModelInfo",
+    
+    # Events
+    "AssistantMessageEvent",
+    "AssistantMessageEventStream",
+    "StreamBuffer",
+    "AgentEvent",
+    "AgentTool",
+    
+    # Provider
+    "BaseProvider",
+    "ProviderConfig",
+    "ProviderRegistry",
+    "get_provider_registry",
+    
+    # Registry
+    "ModelRegistry",
+    "ModelCapability",
+    "get_registry",
+    
+    # Stream utils
+    "create_event_stream",
+    "stream_to_string",
+    "stream_to_messages",
+    
+    # Legacy providers
     "OpenAIProvider",
     "AnthropicProvider",
     "KimiProvider",
-    "create_provider",
-    "list_supported_providers",
-    "ModelRegistry",
-    "ModelCapability",
-    "ModelInfo",
-    "get_registry",
 ]
 
 if HAS_TOKENIZER:

@@ -1,7 +1,7 @@
 """
-Koda - Pi Coding Agent 的 Python 实现
+Koda - Pi Coding Agent Python Implementation
 
-完全对标 https://github.com/badlogic/pi-mono
+Fully compatible with https://github.com/badlogic/pi-mono
 
 Modules:
     ai: Unified LLM interface (packages/ai)
@@ -11,12 +11,14 @@ Modules:
 
 Example:
     >>> from koda import ai, agent, coding
+    >>> from koda.ai import create_provider
     >>> 
     >>> # Create LLM provider
-    >>> provider = ai.create_provider("openai", api_key="sk-...")
+    >>> provider = create_provider("openai", api_key="sk-...")
     >>> 
     >>> # Use tools
-    >>> file_tool = coding.FileTool()
+    >>> from koda.coding.tools import FileTool
+    >>> file_tool = FileTool()
     >>> 
     >>> # Create agent
     >>> ag = agent.Agent(provider)
@@ -24,47 +26,26 @@ Example:
 
 __version__ = "0.2.0"
 
-# Submodules
-from koda import ai
-from koda import mes
-from koda import agent
-from koda import coding
-
-# Convenience exports
-from koda.ai import (
-    LLMProvider,
-    Message,
-    Model,
-    create_provider,
-    list_supported_providers,
-)
-
-from koda.coding import (
-    FileTool,
-    ShellTool,
-    GrepTool,
-    FindTool,
-    LsTool,
-)
+# Submodules - lazy import to avoid circular dependencies
+def __getattr__(name):
+    if name == "ai":
+        from koda import ai as module
+        return module
+    elif name == "mes":
+        from koda import mes as module
+        return module
+    elif name == "agent":
+        from koda import agent as module
+        return module
+    elif name == "coding":
+        from koda import coding as module
+        return module
+    raise AttributeError(f"module 'koda' has no attribute '{name}'")
 
 __all__ = [
-    # Submodules
+    "__version__",
     "ai",
-    "mes", 
+    "mes",
     "agent",
     "coding",
-    
-    # Quick access - AI
-    "LLMProvider",
-    "Message",
-    "Model",
-    "create_provider",
-    "list_supported_providers",
-    
-    # Quick access - Tools
-    "FileTool",
-    "ShellTool",
-    "GrepTool",
-    "FindTool",
-    "LsTool",
 ]
