@@ -10,8 +10,8 @@ import tempfile
 import os
 from pathlib import Path
 
-from koda.tools.file_tool import FileTool
-from koda.tools.shell_tool import ShellTool
+from koda.coding.tools.file_tool import FileTool
+from koda.coding.tools.shell_tool import ShellTool
 
 
 class TestReadTool:

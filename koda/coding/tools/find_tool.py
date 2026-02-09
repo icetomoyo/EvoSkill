@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 from pathlib import Path
 
-from koda.tools._support.truncation import truncate_head, format_size, DEFAULT_MAX_BYTES
+from koda.coding._support.truncation import truncate_head, format_size, DEFAULT_MAX_BYTES
 
 
 @dataclass

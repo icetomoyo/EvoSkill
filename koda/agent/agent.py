@@ -92,11 +92,11 @@ class Agent:
     
     def _register_builtin_tools(self) -> None:
         """Register built-in tools"""
-        from koda.tools.file_tool import FileTool
-        from koda.tools.shell_tool import ShellTool
-        from koda.tools.grep_tool import GrepTool
-        from koda.tools.find_tool import FindTool
-        from koda.tools.ls_tool import LsTool
+        from koda.coding.tools.file_tool import FileTool
+        from koda.coding.tools.shell_tool import ShellTool
+        from koda.coding.tools.grep_tool import GrepTool
+        from koda.coding.tools.find_tool import FindTool
+        from koda.coding.tools.ls_tool import LsTool
         from koda.agent.tools import Tool
         
         file_tool = FileTool()

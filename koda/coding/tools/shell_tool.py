@@ -18,7 +18,7 @@ import tempfile
 import os
 import sys
 
-from koda.tools._support.truncation import truncate_tail, format_size, DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES
+from koda.coding._support.truncation import truncate_tail, format_size, DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES
 
 
 @dataclass

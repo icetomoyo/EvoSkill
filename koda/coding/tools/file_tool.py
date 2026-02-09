@@ -13,13 +13,13 @@ import base64
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from koda.tools._support.truncation import truncate_head, format_size
-from koda.tools.edit_utils import (
+from koda.coding._support.truncation import truncate_head, format_size
+from koda.coding.tools.edit_utils import (
     strip_bom, detect_line_ending, normalize_to_lf, restore_line_endings,
     fuzzy_find_with_replacement, count_occurrences, generate_diff
 )
-from koda.tools._support.image_resize import resize_image, format_dimension_note, PIL_AVAILABLE
-from koda.tools._support.multimodal_types import ImageContent, TextContent
+from koda.coding._support.image_resize import resize_image, format_dimension_note, PIL_AVAILABLE
+from koda.coding._support.multimodal_types import ImageContent, TextContent
 
 
 @dataclass
