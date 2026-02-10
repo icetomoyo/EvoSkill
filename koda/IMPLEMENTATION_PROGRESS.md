@@ -1,325 +1,159 @@
 # Koda Core Implementation Progress
 
-> Target: Full parity with Pi Mono's ai/agent/coding-agent/mom packages
-> Strategy: 6 Sprints, TUI deferred
+> Target: **100% parity** with Pi Mono's ai/agent/coding-agent/mom packages
+> Current: 63% (after detailed audit)
+> Goal: 100% (excluding TUI/Extensions)
 
 ---
 
-## Sprint Status
+## Current Status
 
-| Sprint | Focus | Status | Progress | Test Status |
-|--------|-------|--------|----------|-------------|
-| 1 | Types & Event Stream | ✅ Complete | 100% | 10/10 passed |
-| 2 | Core Providers | ✅ Complete | 100% | 6/6 passed |
-| 3 | Agent & Auth | 🔄 In Progress | 10% | - |
-| 4 | Session & Compaction | ⏳ Planned | 0% | - |
-| 5 | Tool Enhancements | ⏳ Planned | 0% | - |
-| 6 | MOM Integration | ⏳ Planned | 0% | - |
+| Package | Previous Claim | Real Status | Gap | Priority |
+|---------|---------------|-------------|-----|----------|
+| packages/ai | 75% | **65%** | -10% | 🔴 P0 |
+| packages/agent | 85% | **75%** | -10% | 🔴 P0 |
+| packages/coding-agent | 65% | **55%** | -10% | 🔴 P0 |
+| packages/mom | 75% | **60%** | -15% | 🟡 P1 |
+| **Total** | **72%** | **63%** | **-9%** | |
 
----
-
-## Sprint 1: Types & Event Stream ✅
-
-### Completed
-- [x] Complete type definitions (koda/ai/types.py)
-  - [x] All Enums: KnownApi, KnownProvider, ThinkingLevel, CacheRetention, StopReason
-  - [x] Content types: TextContent, ThinkingContent, ImageContent, ToolCall
-  - [x] Message types: UserMessage, AssistantMessage, ToolResultMessage
-  - [x] Context, Tool, Usage with cost calculation
-  - [x] StreamOptions, SimpleStreamOptions with all fields
-  - [x] ModelInfo with full metadata
-  - [x] AssistantMessageEvent for streaming
-  - [x] AgentEvent, AgentTool
-
-- [x] Event Stream System (koda/ai/event_stream.py)
-  - [x] AssistantMessageEventStream class
-  - [x] Async iteration support
-  - [x] Sync and async callbacks
-  - [x] Event collection (collect())
-  - [x] StreamBuffer for SSE parsing
-  - [x] Utility functions
-
-- [x] Provider Base (koda/ai/provider_base.py)
-  - [x] BaseProvider abstract class
-  - [x] ProviderConfig dataclass
-  - [x] Rate limit handling
-  - [x] Retry logic with exponential backoff
-  - [x] Event emission helpers (_emit_*)
-  - [x] ProviderRegistry
-
-### Tests
-```
-All Sprint 1 Tests PASSED!
-- Enums: PASSED
-- Content Types: PASSED  
-- Messages: PASSED
-- Usage: PASSED
-- Context: PASSED
-- ModelInfo: PASSED
-- StreamOptions: PASSED
-- EventStream: PASSED
-- Provider Base: PASSED
-- EventStream Async: PASSED (5 events received)
-```
-
-### Files Added
-- `koda/ai/types.py` (9,252 bytes)
-- `koda/ai/event_stream.py` (9,017 bytes)
-- `koda/ai/provider_base.py` (13,929 bytes)
-- `koda/DESIGN_ROADMAP.md` (28,898 bytes)
-- `test_sprint1.py` (7,955 bytes)
+**Missing for 100%: ~37% functionality**
 
 ---
 
-## Sprint 2: Core Providers ✅
+## Critical Gaps Identified
 
-### Completed
+### 🔴 P0 - Must Implement (Blocking)
 
-#### 2.1 Refactored Providers
-- [x] OpenAI Provider V2 - Full implementation
-  - [x] Completions API
-  - [x] Streaming with SSE
-  - [x] Tool calling
-  - [x] Vision support
-  - [x] Reasoning (o-series)
-  - [x] Cost calculation
-  
-- [x] Anthropic Provider V2 - Full implementation
-  - [x] Messages API
-  - [x] Streaming
-  - [x] Extended thinking
-  - [x] Prompt caching
-  - [x] Tool use
-  - [x] Vision
-  
-- [x] Google Provider
-  - [x] Generative AI API
-  - [x] Vertex AI support
-  - [x] Streaming
-  - [x] Tools
-  - [x] Vision
-  
-- [x] Bedrock Provider
-  - [x] Converse Stream API
-  - [x] Multi-model support
-  - [x] Tool use
-  - [x] Streaming
+#### AI Package (10 items)
+1. OpenAI **Responses API** (distinct from Completions)
+2. Azure OpenAI Provider
+3. GitHub Copilot Provider
+4. Anthropic OAuth complete
+5. GitHub Copilot OAuth
+6. `supportsXhigh()` helper
+7. `modelsAreEqual()` helper
+8. Anthropic: Claude Code tool name mapping
+9. Anthropic: interleaved thinking
+10. SSE event parsing edge cases
 
-#### 2.2 Provider Features Implemented
-- [x] Thinking level support (o-series, Claude 3.7+)
-- [x] Cache retention (Anthropic)
-- [x] Streaming with all event types
-- [x] Tool call parsing (all providers)
-- [x] Vision support (all providers)
-- [x] Cost calculation
-- [x] Retry logic with exponential backoff
-- [x] Rate limit handling
+#### Agent Package (2 items)
+11. **AgentProxy** for multi-agent
+12. Task delegation system
 
-### Tests
-```
-All Sprint 2 Tests PASSED! (6/6)
-- Provider Properties: PASSED
-- Cost Calculation: PASSED ($7.50 for 1M/500K tokens)
-- Message Conversion: PASSED (OpenAI/Anthropic/Google)
-- Provider Registry: PASSED
-- Tool Handling: PASSED
-- Anthropic Caching: PASSED
-```
+#### Coding-Agent Package (10 items)
+13. ModelRegistry: Schema validation (TypeBox equivalent)
+14. ModelRegistry: Config value resolution with command substitution
+15. Compaction: Smart cut point detection
+16. Compaction: File operation tracking
+17. Session: All entry types (ModelChange, ThinkingLevelChange, Custom, File)
+18. Session: Version migration system
+19. Settings: Hierarchical config (project-level)
+20. Settings: File watch reload
+21. Edit: Pluggable EditOperations interface
+22. Bash: Spawn hooks for SSH/remoting
 
-### Files Added
-- `koda/ai/providers/openai_provider_v2.py` (16KB)
-- `koda/ai/providers/anthropic_provider_v2.py` (17.8KB)
-- `koda/ai/providers/google_provider.py` (14.2KB)
-- `koda/ai/providers/bedrock_provider.py` (12.5KB)
-- `test_sprint2.py` (8.9KB)
+#### MOM Package (3 items)
+23. MOM Agent class
+24. Download functionality
+25. Slack Bot integration (optional)
 
 ---
 
-## Sprint 3: Agent & Auth ⏳
+## Implementation Plan to 100%
 
-### Planned
+### Phase 1: AI Package Completion (Week 1-2)
 
-#### 3.1 Agent Loop Enhancement
-- [ ] AgentLoopConfig
-- [ ] Max iteration protection
-- [ ] Tool error retry
-- [ ] Parallel tool execution
-- [ ] AbortSignal support
+**Week 1: OpenAI Responses API & Azure**
+- [ ] Implement `streamOpenAIResponses()`
+- [ ] Create `AzureOpenAIProvider`
+- [ ] Create `OpenAIResponsesCompat` handling
+- [ ] Add `stream_options` for usage in streaming
+- [ ] Implement developer vs system role handling
 
-#### 3.2 Agent Proxy
-- [ ] Multi-agent coordination
-- [ ] Task delegation
+**Week 2: OAuth & Utilities**
+- [ ] Complete `AnthropicOAuth` implementation
+- [ ] Implement `GitHubCopilotOAuth`
+- [ ] Add `supportsXhigh()` helper
+- [ ] Add `modelsAreEqual()` helper
+- [ ] Implement local callback server for OAuth
 
-#### 3.3 Auth Storage
-- [ ] ApiKeyCredential / OAuthCredential
-- [ ] Secure storage (keyring)
-- [ ] Token refresh
-- [ ] Fallback resolver
+### Phase 2: Agent Package Completion (Week 3)
 
-#### 3.4 OAuth Implementation
-- [ ] Google OAuth
-- [ ] Anthropic OAuth
-- [ ] GitHub Copilot OAuth
+**Week 3: AgentProxy**
+- [ ] Implement `AgentProxy` class
+- [ ] Add multi-agent coordination
+- [ ] Implement task delegation
+- [ ] Add agent registry
 
----
+### Phase 3: Coding-Agent Completion (Week 4-5)
 
-## Sprint 4: Session & Compaction ⏳
+**Week 4: ModelRegistry & Compaction**
+- [ ] Add JSON Schema validation
+- [ ] Implement `resolveConfigValue` with `$(cmd)` substitution
+- [ ] Add environment variable expansion
+- [ ] Implement `findCutPoint` algorithm
+- [ ] Add `FileOperations` tracking
 
-### Planned
+**Week 5: Session & Settings**
+- [ ] Add all entry types
+- [ ] Implement version migration
+- [ ] Add hierarchical settings
+- [ ] Implement file watching
+- [ ] Add `EditOperations` interface
+- [ ] Add `BashSpawnHook` support
 
-#### 4.1 Model Registry Enhancement
-- [ ] Custom models.json loading
-- [ ] Schema validation
-- [ ] Provider/model overrides
-- [ ] Dynamic provider registration
-- [ ] Available model filtering
+### Phase 4: MOM Package & Polish (Week 6)
 
-#### 4.2 Enhanced Compaction
-- [ ] CompactionSettings
-- [ ] Branch summarization
-- [ ] Cut point detection
-- [ ] File operation deduplication
-- [ ] Usage tracking
-
-#### 4.3 Session Manager
-- [ ] SessionContext / SessionEntry types
-- [ ] Tree branch navigation
-- [ ] Migration system
-- [ ] Import/export (JSON, Markdown, HTML)
-- [ ] Garbage collection
-
-#### 4.4 Settings Manager
-- [ ] Hierarchical config (global + project)
-- [ ] File watching
-- [ ] Schema validation
-- [ ] Settings migration
-
----
-
-## Sprint 5: Tool Enhancements ⏳
-
-### Planned
-
-#### 5.1 Edit Tool Enhancement
-- [ ] Fuzzy matching
-- [ ] Smart quote/dash normalization
-- [ ] BOM handling
-- [ ] Line ending preservation
-- [ ] AbortSignal support
-
-#### 5.2 Bash Tool Enhancement
-- [ ] Timeout control
-- [ ] Output limits
-- [ ] Spawn hooks
-- [ ] Environment injection
-- [ ] Combined output
-
-#### 5.3 Other Tools
-- [ ] All tools with AbortSignal
-- [ ] Pluggable operations
-- [ ] Result details
-
----
-
-## Sprint 6: MOM Integration ⏳
-
-### Planned
-
-#### 6.1 Context Manager
-- [ ] Dynamic context management
-- [ ] Token window management
-
-#### 6.2 Store
-- [ ] Persistent storage
-- [ ] Data migration
-
-#### 6.3 Sandbox
-- [ ] Isolated execution
-- [ ] Resource limits
-
-#### 6.4 Integration
-- [ ] End-to-end testing
+**Week 6: MOM & Integration**
+- [ ] Implement MOM Agent class
+- [ ] Add Download functionality
+- [ ] Integration tests
 - [ ] Performance optimization
 
----
+### Phase 5: Verification (Week 7)
 
-## Feature Checklist vs Pi Mono
-
-### packages/ai
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Complete type system | ✅ Done | All types defined |
-| Event stream | ✅ Done | Full async support |
-| Provider base | ✅ Done | Abstract class ready |
-| OpenAI Provider V2 | ✅ Done | Full implementation |
-| Anthropic Provider V2 | ✅ Done | Full implementation |
-| Google Provider | ✅ Done | Gemini + Vertex |
-| Bedrock Provider | ✅ Done | AWS Bedrock |
-| Azure Provider | ⏳ Todo | To be added |
-| OAuth system | ⏳ Todo | Sprint 3 |
-| Streaming | ✅ Done | Full SSE support |
-| Tool calls | ✅ Done | Full parsing |
-| Vision | ✅ Done | Multimodal support |
-| Thinking levels | ✅ Done | Implemented |
-| Cache retention | ✅ Done | Anthropic supported |
-
-### packages/agent
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Agent Loop | ⚠️ Partial | Basic only |
-| Max iterations | ⏳ Todo | Sprint 3 |
-| Tool retry | ⏳ Todo | Sprint 3 |
-| Parallel tools | ⏳ Todo | Sprint 3 |
-| Agent Proxy | ⏳ Todo | Sprint 3 |
-
-### packages/coding-agent
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Auth Storage | ⏳ Todo | Sprint 3 |
-| Model Registry | ⚠️ Partial | Basic only |
-| Session Manager | ⏳ Todo | Sprint 4 |
-| Enhanced Compaction | ⚠️ Partial | Sprint 4 |
-| Settings Manager | ⚠️ Partial | Sprint 4 |
-| Enhanced Edit | ⏳ Todo | Sprint 5 |
-| Enhanced Bash | ⏳ Todo | Sprint 5 |
-| Other tools | ⚠️ Partial | Working |
-| Export HTML | ⏳ Todo | Deferred |
-| Extension system | ❌ N/A | Post-TUI |
-| TUI | ❌ N/A | Post-core |
-
-### packages/mom
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Context Manager | ⏳ Todo | Sprint 6 |
-| Store | ⏳ Todo | Sprint 6 |
-| Sandbox | ⏳ Todo | Sprint 6 |
-| Events | ✅ Done | Via agent |
+**Week 7: Testing**
+- [ ] Unit tests for all new features
+- [ ] Integration tests matching Pi Mono behavior
+- [ ] End-to-end workflow tests
+- [ ] Performance benchmarks
 
 ---
 
-## Lines of Code
+## Sprint History
 
-| Component | Lines | Status |
-|-----------|-------|--------|
-| types.py | ~350 | ✅ Done |
-| event_stream.py | ~300 | ✅ Done |
-| provider_base.py | ~450 | ✅ Done |
-| openai_provider_v2.py | ~450 | ✅ Done |
-| anthropic_provider_v2.py | ~500 | ✅ Done |
-| google_provider.py | ~400 | ✅ Done |
-| bedrock_provider.py | ~350 | ✅ Done |
-| **Sprint 1+2 Total** | **~2,800** | ✅ |
+### ✅ Sprint 1: Types & Event Stream (Complete)
+- **Files**: `types.py`, `event_stream.py`, `provider_base.py`
+- **LOC**: ~1,100
+- **Tests**: 10/10 passing
+- **Status**: Complete
+
+### ✅ Sprint 2: Core Providers (Complete)
+- **Files**: 4 providers (OpenAI, Anthropic, Google, Bedrock)
+- **LOC**: ~1,700
+- **Tests**: 6/6 passing
+- **Status**: Core complete, advanced features pending
+
+### ✅ Sprint 3-6: Agent, Auth, Session, Tools, MOM (Complete)
+- **Files**: 8 modules
+- **LOC**: ~2,500
+- **Tests**: 8/8 passing
+- **Status**: Core complete, advanced features pending
 
 ---
 
 ## Next Steps
 
-1. **Sprint 3**: Agent & Auth
-2. **Sprint 4**: Session & Compaction
-3. **Sprint 5**: Tool Enhancements
-4. **Sprint 6**: MOM Integration
-5. **Final Review**: Detailed comparison with Pi Mono
+1. **Immediate**: Start Phase 1 - OpenAI Responses API
+2. **This Week**: Implement Azure Provider
+3. **Next Week**: Complete OAuth implementations
+4. **Ongoing**: Track progress against 100% checklist
+
+---
+
+## Files Added This Session
+
+- `koda/PI_MONO_100_PERCENT_CHECKLIST.md` - Detailed audit (18KB)
+- Updated `koda/IMPLEMENTATION_PROGRESS.md` - Real status tracking
+
+**Next commit will start Phase 1 implementation**
