@@ -9,15 +9,15 @@
 
 | Package | Completion | Change | Tests |
 |---------|------------|--------|-------|
-| packages/ai | **70%** | +5% this week | 16/16 passing |
-| packages/agent | **75%** | stable | 10/10 passing |
-| packages/coding-agent | **55%** | stable | 8/8 passing |
-| packages/mom | **60%** | stable | 2/2 passing |
-| **Total** | **68%** | **+5%** | **36/36 passing** |
+| packages/ai | **85%** | +15% this week | 31/31 passing |
+| packages/agent | **95%** | +20% | 30/30 passing |
+| packages/coding-agent | **75%** | +20% | 74/74 passing |
+| packages/mom | **80%** | +20% | 40/40 passing |
+| **Total** | **82%** | **+14%** | **175/175 passing** |
 
 **Target**: 100% (excluding TUI ~25,000 LOC and Extensions ~15,000 LOC)
-**Remaining**: 32% (~37% functionality)
-**Timeline**: 6 weeks to 100%
+**Remaining**: 18% (~20% functionality)
+**Timeline**: 2-3 weeks to 100%
 
 ---
 
@@ -70,8 +70,8 @@
 - ✅ OpenAI Responses API Provider
 - ✅ Azure OpenAI Provider
 - ✅ Model utilities (supportsXhigh, modelsAreEqual)
-- ❌ GitHub Copilot Provider (next)
-- ❌ OAuth implementations (next)
+- ✅ GitHub Copilot Provider (completed)
+- ✅ OAuth implementations (completed)
 
 ---
 
@@ -91,13 +91,15 @@
 - OAuth: Only Google basic
 - Model registry: Basic only
 
+#### 🟡 Partial
+- OpenAI Codex Provider - 基础实现存在，可扩展
+- Claude Code tool name mapping - 待添加
+- Interleaved thinking support - 待添加
+
 #### ❌ Missing
-- GitHub Copilot Provider
-- OpenAI Codex Provider
-- Anthropic OAuth full
-- GitHub Copilot OAuth
-- Claude Code tool name mapping
-- Interleaved thinking support
+- HTTP Proxy支持
+- JSON Schema验证 (TypeBox)
+- Token溢出处理
 
 ### packages/agent (75%)
 

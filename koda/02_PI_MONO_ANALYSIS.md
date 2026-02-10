@@ -922,39 +922,39 @@ export interface Store {
 ### 5.1 packages/ai 补全
 
 #### 必补 (P0)
-1. ✅ `supportsXhigh()` - 已实现
-2. ✅ `modelsAreEqual()` - 已实现
-3. ✅ OpenAI Responses API - 已实现
-4. ✅ Azure OpenAI Provider - 已实现
-5. ❌ GitHub Copilot Provider
+1. ✅ `supportsXhigh()` - 已实现 (koda/ai/models_utils.py)
+2. ✅ `modelsAreEqual()` - 已实现 (koda/ai/models_utils.py)
+3. ✅ OpenAI Responses API - 已实现 (koda/ai/providers/openai_responses.py)
+4. ✅ Azure OpenAI Provider - 已实现 (koda/ai/providers/azure_provider.py)
+5. ✅ GitHub Copilot Provider - 已实现 (koda/ai/github_copilot.py)
 6. ❌ Anthropic: Claude Code工具名映射
 7. ❌ Anthropic: interleaved thinking
-8. ❌ Anthropic OAuth完整实现
-9. ❌ GitHub Copilot OAuth
+8. ✅ Anthropic OAuth - 已实现 (koda/ai/oauth.py)
+9. ✅ GitHub Copilot OAuth - 已实现 (koda/ai/oauth.py)
 
 #### 可选 (P1)
 10. ❌ JSON Schema验证 (TypeBox)
-11. ❌ 更精确的Token计算
+11. ⚠️ Token计算 - 基础实现完成，可优化
 
 ### 5.2 packages/agent 补全
 
 #### 必补 (P0)
-1. ❌ AgentProxy
-2. ❌ 多Agent协调
-3. ❌ 任务委派
+1. ✅ AgentProxy - 已实现 (koda/agent/proxy.py)
+2. ✅ 多Agent协调 - 已实现 (AgentProxy)
+3. ✅ 任务委派 - 已实现 (AgentProxy.delegate)
 
 ### 5.3 packages/coding-agent 补全
 
 #### 必补 (P0)
-1. ❌ ModelRegistry: Schema验证
-2. ❌ ModelRegistry: 命令替换
-3. ❌ Compaction: findCutPoint
-4. ❌ Compaction: FileOperations跟踪
-5. ❌ Session: 所有Entry类型
+1. ❌ ModelRegistry: Schema验证 (AJV/TypeBox)
+2. ❌ ModelRegistry: 命令替换 $(cmd)
+3. ✅ Compaction: findCutPoint - 已实现 (koda/mes/compaction_advanced.py)
+4. ✅ Compaction: FileOperations跟踪 - 已实现 (koda/mes/compaction_advanced.py)
+5. ✅ Session: 所有Entry类型 - 已实现 (koda/mes/compaction_advanced.py)
 6. ❌ Session: 版本迁移
-7. ❌ Settings: 层级配置
+7. ❌ Settings: 层级配置 (全局/项目)
 8. ❌ Settings: 文件监视
-9. ❌ Edit: EditOperations接口
+9. ✅ Edit: EditOperations接口 - 已实现 (koda/coding/tools/edit_operations.py)
 10. ❌ Bash: BashSpawnHook
 
 #### 可选 (P1)
@@ -971,7 +971,60 @@ export interface Store {
 
 ---
 
-## 第六部分: 文档整理合并计划
+## 第六部分: 其他文件覆盖情况
+
+### 6.1 packages/ai/utils/ 文件
+
+| Pi Mono 文件 | Koda 对应 | 状态 | 说明 |
+|--------------|-----------|------|------|
+| `utils/oauth/*.ts` | `koda/ai/oauth.py` | ✅ | OAuth完整实现 |
+| `utils/event-stream.ts` | `koda/ai/event_stream.py` | ✅ | SSE事件流解析 |
+| `utils/json-parse.ts` | 内置json模块 | ✅ | Python标准库 |
+| `utils/overflow.ts` | 未实现 | ❌ | Token溢出处理 |
+| `utils/sanitize-unicode.ts` | 未实现 | ❌ | Unicode净化 |
+| `utils/http-proxy.ts` | 未实现 | ❌ | HTTP代理支持 |
+| `utils/typebox-helpers.ts` | 未实现 | ❌ | JSON Schema验证 |
+| `utils/validation.ts` | 部分实现 | ⚠️ | 基础验证 |
+
+### 6.2 packages/coding-agent/core/ 其他文件
+
+| Pi Mono 文件 | Koda 对应 | 状态 | 说明 |
+|--------------|-----------|------|------|
+| `core/auth-storage.ts` | `koda/mom/store.py` | ⚠️ | 基础存储实现 |
+| `core/bash-executor.ts` | `koda/coding/tools/shell_tool.py` | ✅ | Shell执行 |
+| `core/event-bus.ts` | `koda/agent/events.py` | ✅ | 事件系统 |
+| `core/export-html/` | 未实现 | ❌ | HTML导出 |
+| `core/extensions/` | 未实现 | ❌ | 扩展系统 |
+| `core/skills.ts` | `evoskill/skills/` | ⚠️ | 技能系统 |
+| `core/settings-manager.ts` | 未实现 | ❌ | 层级设置 |
+| `core/system-prompt.ts` | `koda/core/prompts.py` | ✅ | 系统提示词 |
+
+### 6.3 packages/coding-agent/tools/ 文件
+
+| Pi Mono 文件 | Koda 对应 | 状态 | 说明 |
+|--------------|-----------|------|------|
+| `tools/bash.ts` | `koda/coding/tools/shell_tool.py` | ✅ | Bash工具 |
+| `tools/edit.ts` | `koda/coding/tools/edit_*.py` | ✅ | Edit工具系列 |
+| `tools/read.ts` | `koda/coding/tools/file_tool.py` | ✅ | 文件读取 |
+| `tools/write.ts` | `koda/coding/tools/file_tool.py` | ✅ | 文件写入 |
+| `tools/grep.ts` | `koda/coding/tools/grep_tool.py` | ✅ | Grep工具 |
+| `tools/find.ts` | `koda/coding/tools/find_tool.py` | ✅ | Find工具 |
+| `tools/ls.ts` | `koda/coding/tools/ls_tool.py` | ✅ | 目录列表 |
+
+### 6.4 覆盖率统计
+
+| 包 | 总文件数 | 已实现 | 覆盖率 |
+|----|---------|--------|--------|
+| packages/ai | ~30 | ~25 | ~83% |
+| packages/agent | ~5 | ~5 | 100% |
+| packages/coding-agent | ~40 | ~25 | ~63% |
+| packages/mom | ~10 | ~8 | 80% |
+| packages/tui | ~20 | 0 | 0% (Deferred) |
+| **总计** | **~105** | **~63** | **~60%** |
+
+---
+
+## 第七部分: 文档整理合并计划
 
 ### 现有文档
 
@@ -1018,17 +1071,28 @@ koda/docs/
 
 ### Pi Mono 核心文件对应
 
-| Pi Mono | Koda | 状态 |
-|---------|------|------|
-| `ai/types.ts` | `koda/ai/types.py` | ✅ |
-| `ai/models.ts` | `koda/ai/models_utils.py` | ⚠️ 部分 |
-| `ai/stream.ts` | `koda/ai/event_stream.py` | ✅ |
-| `ai/providers/*.ts` | `koda/ai/providers/*.py` | ⚠️ 部分 |
-| `agent/agent-loop.ts` | `koda/agent/loop.py` | ⚠️ 部分 |
-| `agent/proxy.ts` | N/A | ❌ |
-| `coding-agent/session-manager.ts` | `koda/coding/session_manager.py` | ⚠️ 部分 |
-| `coding-agent/model-registry.ts` | `koda/ai/registry.py` | ⚠️ 部分 |
-| `coding-agent/compaction/*.ts` | `koda/mes/compaction.py` | ⚠️ 部分 |
-| `mom/agent.ts` | N/A | ❌ |
-| `mom/sandbox.ts` | `koda/mom/sandbox.py` | ✅ |
-| `mom/store.ts` | `koda/mom/store.py` | ✅ |
+| Pi Mono | Koda | 状态 | 备注 |
+|---------|------|------|------|
+| `ai/types.ts` | `koda/ai/types.py` | ✅ | 完整实现 |
+| `ai/models.ts` | `koda/ai/models_utils.py` | ✅ | 完整实现 |
+| `ai/stream.ts` | `koda/ai/event_stream.py` | ✅ | 完整实现 |
+| `ai/providers/anthropic.ts` | `koda/ai/providers/anthropic_provider_v2.py` | ✅ | 完整实现 |
+| `ai/providers/openai-completions.ts` | `koda/ai/providers/openai_provider_v2.py` | ✅ | 完整实现 |
+| `ai/providers/openai-responses.ts` | `koda/ai/providers/openai_responses.py` | ✅ | 完整实现 |
+| `ai/providers/azure-openai-responses.ts` | `koda/ai/providers/azure_provider.py` | ✅ | 完整实现 |
+| `ai/providers/google.ts` | `koda/ai/providers/google_provider.py` | ✅ | 完整实现 |
+| `ai/providers/bedrock.ts` | `koda/ai/providers/bedrock_provider.py` | ✅ | 完整实现 |
+| `ai/providers/github-copilot.ts` | `koda/ai/github_copilot.py` | ✅ | 完整实现 |
+| `ai/utils/oauth/*.ts` | `koda/ai/oauth.py` | ✅ | 支持Google/Anthropic/GitHub |
+| `agent/agent-loop.ts` | `koda/agent/loop.py` | ✅ | 完整实现 |
+| `agent/proxy.ts` | `koda/agent/proxy.py` | ✅ | 完整实现 |
+| `coding-agent/session-manager.ts` | `koda/coding/session_manager.py` | ⚠️ | 基础实现 |
+| `coding-agent/model-registry.ts` | `koda/ai/registry.py` | ⚠️ | 基础实现，无Schema验证 |
+| `coding-agent/compaction/*.ts` | `koda/mes/compaction.py` | ✅ | 基础实现 |
+| `coding-agent/compaction/branch-summarization.ts` | `koda/mes/compaction_advanced.py` | ✅ | 完整实现 |
+| `coding-agent/tools/edit-diff.ts` | `koda/coding/tools/edit_diff_tool.py` | ✅ | 完整实现 |
+| `coding-agent/tools/edit.ts` | `koda/coding/tools/edit_enhanced.py` | ✅ | 完整实现 |
+| `coding-agent/tools/edit-operations.ts` | `koda/coding/tools/edit_operations.py` | ✅ | 完整实现 |
+| `mom/agent.ts` | N/A | ❌ | 未实现 |
+| `mom/sandbox.ts` | `koda/mom/sandbox.py` | ✅ | 完整实现 |
+| `mom/store.ts` | `koda/mom/store.py` | ✅ | 完整实现 |
