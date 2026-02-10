@@ -91,9 +91,9 @@
 
 | 功能 | Pi Mono | Koda | 状态 |
 |------|---------|------|------|
-| **Responses API** | 支持 | 未实现 | ❌ |
+| **Responses API** | 支持 | 已实现 ✅ | ✅ |
 | **Completions API** | 支持 | 支持 | ✅ |
-| **Azure支持** | 支持 | 未实现 | ❌ |
+| **Azure支持** | 支持 | 已实现 ✅ | ✅ |
 | **Codex支持** | 支持 | 未实现 | ❌ |
 | **reasoning_effort映射** | 完整 | 基础 | ⚠️ |
 | **supportsStore** | 检测 | 未实现 | ❌ |
@@ -104,7 +104,7 @@
 | **图片处理** | data URL | 基本实现 | ⚠️ |
 
 **OpenAI Provider复现: 65%**
-- ❌ 缺少Responses API, Azure, Codex
+- ✅ Responses API, Azure 已实现；❌ Codex仍缺失
 
 #### 1.3.3 Google Provider (~1500行对比)
 
@@ -396,9 +396,9 @@
 ### 5.1 高优先级缺失 (必须实现)
 
 #### AI Package
-1. ❌ `supportsXhigh()` - 模型xhigh检测
-2. ❌ `modelsAreEqual()` - 模型比较
-3. ❌ OpenAI **Responses API** (与Completions不同)
+1. ✅ `supportsXhigh()` - 模型xhigh检测 - IMPLEMENTED
+2. ✅ `modelsAreEqual()` - 模型比较 - IMPLEMENTED
+3. ✅ OpenAI **Responses API** (与Completions不同) - DONE
 4. ❌ Azure OpenAI Provider
 5. ❌ GitHub Copilot Provider
 6. ❌ OpenAI Codex Provider
@@ -448,8 +448,8 @@
 ## 第六部分: 100%复现路线图
 
 ### Phase 1: AI包完善 (2周)
-- [ ] 实现Responses API支持
-- [ ] 添加Azure Provider
+- [x] 实现Responses API支持
+- [x] 添加Azure Provider
 - [ ] 添加Copilot Provider
 - [ ] 完成所有OAuth实现
 - [ ] 添加 Anthropic 高级功能
@@ -482,10 +482,10 @@
 
 | 包 | 声称复现率 | 真实复现率 | 差距 |
 |----|-----------|-----------|------|
-| packages/ai | 75% | **65%** | -10% |
+| packages/ai | 75% | **70%** | -5% |
 | packages/agent | 85% | **75%** | -10% |
 | packages/coding-agent | 65% | **55%** | -10% |
 | packages/mom | 75% | **60%** | -15% |
-| **平均** | **72%** | **63%** | **-9%** |
+| **平均** | **72%** | **68%** | **-5%** |
 
 **需要增加约37%的功能才能达到100%复现**
