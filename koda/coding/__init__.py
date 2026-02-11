@@ -161,6 +161,12 @@ from .skills import (
     set_skills_manager,
 )
 from .package_manager import Package, PackageLock, PackageRegistry, PackageManager
+from .resolve_config_value import (
+    resolve_config_value,
+    clear_config_value_cache,
+    is_cached,
+    resolve_headers,
+)
 
 __all__ = [
     # Resource loading
@@ -287,4 +293,9 @@ __all__ = [
     "PackageLock",
     "PackageRegistry",
     "PackageManager",
+    # Config value resolution
+    "resolve_config_value",
+    "clear_config_value_cache",
+    "is_cached",
+    "resolve_headers",
 ]

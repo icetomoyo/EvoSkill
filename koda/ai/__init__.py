@@ -31,6 +31,7 @@ from .token_counter import TokenCounter, TokenCount, count_tokens, estimate_cost
 from .rate_limiter import RateLimiter, RateLimitConfig, RateLimitStrategy, MultiKeyRateLimiter, rate_limited
 from .retry import RetryHandler, RetryConfig, RetryStrategy, CircuitBreaker, CircuitBreakerConfig, CircuitState, CircuitBreakerOpenError, ResilientClient, retry
 from .env_api_keys import EnvAPIKeyManager, get_api_key, has_api_key, get_all_api_keys
+from .sanitize_unicode import sanitize_surrogates, sanitize_for_json
 from .typebox_helpers import SchemaBuilder, Validator, ValidationResult, validate_json
 from .models import (
     MODELS,
