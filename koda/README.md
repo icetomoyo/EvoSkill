@@ -1,107 +1,108 @@
-# Koda Documentation
+# Koda - Pi-Mono Python Implementation
 
-> Pi Mono Compatible AI Coding Agent Framework
-> Version: 0.5.0
+Koda 是 [Pi-Mono](https://github.com/pi-mono/pi-mono) 的 Python 实现，提供 AI Agent、Coding Agent 和 Mom (Slack Bot) 功能。
 
----
+## 项目状态
 
-## Documentation Index
+| 模块 | 完成度 | 状态 |
+|------|--------|------|
+| AI Core | 85% | 核心Provider、模型数据库、OAuth ✅ |
+| Agent | 90% | 核心Agent、事件循环、并行处理 ✅ |
+| Coding | 75% | 工具、会话、压缩、CLI ✅ |
+| Mom | 40% | 基础功能，Slack Bot待实现 ⏳ |
 
-| Document | Description | Status |
-|----------|-------------|--------|
-| [01_ARCHITECTURE.md](01_ARCHITECTURE.md) | System architecture and design | Current |
-| [02_PI_MONO_ANALYSIS.md](02_PI_MONO_ANALYSIS.md) | Complete Pi Mono module analysis | Current |
-| [03_IMPLEMENTATION_STATUS.md](03_IMPLEMENTATION_STATUS.md) | Implementation status | Current |
-| [04_GAP_ANALYSIS.md](04_GAP_ANALYSIS.md) | **Detailed gap analysis & file comparison** | **Updated 2026-02-10** |
-| [05_API_REFERENCE.md](05_API_REFERENCE.md) | API reference | Current |
+**总体完成度: 80%**
 
----
-
-## Quick Start
+## 快速开始
 
 ```python
-from koda.ai import get_provider_registry
-from koda.agent.loop import AgentLoop, AgentLoopConfig
-from koda.coding.session_manager import SessionManager
+# 使用AI模型
+from koda.ai.models import get_model, calculate_cost
 
-# 1. Setup provider
-provider = get_provider_registry().create("openai-v2")
+model = get_model('openai', 'gpt-4o')
+cost = calculate_cost(model, Usage(input=1000, output=500))
 
-# 2. Create agent
-tools = [...]
-config = AgentLoopConfig(max_iterations=50)
-agent = AgentLoop(provider, model, tools, config)
+# 使用Coding工具
+from koda.coding.tools import FileTool, ShellTool
 
-# 3. Run
-response = await agent.run(context)
+file_tool = FileTool()
+content = await file_tool.read("README.md")
 ```
 
----
+## 模块说明
 
-## Module Overview
+### koda.ai - AI Provider模块
+- **models/** - 模型数据库（70+模型，9个Provider）
+- **providers/** - Provider实现（OpenAI、Anthropic、Google等）
+- **providers/oauth/** - OAuth认证
+- **cli.py** - AI CLI工具
 
+### koda.agent - Agent模块
+- **agent.py** - Agent核心
+- **loop.py** - 事件循环
+- **parallel.py** - 并行执行
+- **events.py** - 事件系统
+
+### koda.coding - Coding Agent模块
+- **core/** - 核心功能（事件总线、诊断、压缩）
+- **tools/** - 工具集（文件、编辑、Shell、搜索）
+- **cli/** - CLI选择器（配置、会话、模型）
+- **modes/** - 运行模式（交互、打印、RPC）
+
+### koda.mom - Mom模块（Slack Bot）
+- **store.py** - 存储
+- **context.py** - 上下文
+- **sandbox.py** - 沙箱
+- ⚠️ Slack Bot功能待实现
+
+### koda.mes - 消息处理
+- 消息压缩、历史管理、格式化
+
+## 与Pi-Mono的差异
+
+| 方面 | Pi-Mono (TS) | Koda (Python) |
+|------|--------------|---------------|
+| 模型定义 | `models.generated.ts` | `ai/models/generated.py` |
+| OAuth位置 | `ai/utils/oauth/` | `ai/providers/oauth/` |
+| 压缩功能 | `core/compaction/` | `mes/` + `core/compaction/` |
+| 编辑工具 | 单文件 | 多文件拆分 |
+
+## 文档
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) - 架构设计
+- [PI_MONO_PARITY.md](PI_MONO_PARITY.md) - Pi-Mono对比和完成度
+- [API_REFERENCE.md](API_REFERENCE.md) - API参考
+
+## 待实现功能
+
+### P0 (关键)
+- [ ] Mom Slack Bot (`mom/agent.py`, `mom/slack.py`)
+- [ ] Coding SDK完整接口 (`coding/sdk.py`)
+
+### P1 (重要)
+- [ ] 扩展加载器 (`extensions/loader.py`)
+- [ ] 诊断系统完善
+- [ ] TUI交互组件
+
+### P2 (可选)
+- [ ] HTML导出完整版
+- [ ] 图片剪贴板
+- [ ] 各种辅助工具
+
+## 开发
+
+```bash
+# 安装依赖
+pip install -e ".[dev]"
+
+# 运行测试
+pytest tests/
+
+# 使用AI CLI
+python -m koda.ai.cli login
+python -m koda.ai.cli models
 ```
-koda/
-├── ai/          # LLM Provider Interface (85% complete)
-├── agent/       # Agent Framework (70% complete)
-├── coding/      # Coding Agent (69% complete)
-├── mes/         # Message Optimization (70% complete)
-└── mom/         # Model-Optimized Messages (40% complete)
-```
 
----
+## License
 
-## Status Summary
-
-| Package | Completion | Status |
-|---------|------------|--------|
-| packages/ai | 85% | 🟡 In Progress |
-| packages/agent | 70% | 🟡 In Progress |
-| packages/coding-agent | 69% | 🟡 In Progress |
-| packages/mom | 40% | 🔴 Needs Work |
-| **Total** | **~79%** | 🟢 Improving |
-
----
-
-## Recent Updates (2026-02-09)
-
-### ✅ Completed
-- **Claude Code Tool Name Mapping** - Full implementation with 15/15 tests passing
-- **File-by-file code review** - Analyzed all pi-mono source files
-
-### 🔧 Corrections
-- **`agent/proxy.ts`** - Was incorrectly implemented as multi-agent coordination; actually **stream proxy for HTTP routing**
-- **`resolve-config-value.ts`** - Was using `$(command)` syntax; correct syntax is **`!command`**
-- **`overflow.ts`** - Is **error detection** (regex matching), not token management
-
-### 📝 Documentation
-- Merged and updated analysis documents
-- Reduced document count from 8 to 5
-- Clarified actual vs perceived functionality
-
----
-
-## Next Steps
-
-See [04_GAP_ANALYSIS.md](04_GAP_ANALYSIS.md) for detailed roadmap.
-
-### Week 1: Critical Fixes
-1. Fix config value syntax (`!command`)
-2. Implement context overflow detection
-3. Implement stream proxy (correctly)
-
-### Week 2: Core Features
-4. Unicode sanitization
-5. Streaming JSON parser
-6. HTTP proxy support
-
----
-
-## Links
-
-- [GitHub Repository](https://github.com/icetomoyo/EvoSkill)
-- [Pi Mono Reference](https://github.com/badlogic/pi-mono)
-
----
-
-*Last Updated: 2026-02-09*
+MIT
