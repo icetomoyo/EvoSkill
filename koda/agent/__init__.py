@@ -9,14 +9,19 @@ from koda.agent.events import EventBus, Event, EventType
 from koda.agent.tools import ToolRegistry, Tool, ToolContext
 from koda.agent.queue import MessageQueue, QueuedMessage
 from koda.agent.loop import AgentLoop, AgentLoopConfig, AgentTool
-from koda.agent.proxy import (
-    AgentProxy,
-    AgentProxyConfig,
-    AgentPool,
-    AgentInfo,
-    AgentStatus,
-    Task,
-    TaskPriority,
+from koda.agent.stream_proxy import (
+    stream_proxy,
+    ProxyStreamOptions,
+    ProxyMessageEventStream,
+)
+from koda.agent.parallel import (
+    ParallelExecutor,
+    ParallelToolExecutor,
+    ParallelTask,
+    TaskResult,
+    TaskStatus,
+    execute_parallel,
+    execute_with_dependencies,
 )
 
 __all__ = [
@@ -39,12 +44,16 @@ __all__ = [
     "AgentLoop",
     "AgentLoopConfig",
     "AgentTool",
-    # Proxy
-    "AgentProxy",
-    "AgentProxyConfig",
-    "AgentPool",
-    "AgentInfo",
-    "AgentStatus",
-    "Task",
-    "TaskPriority",
+    # Stream Proxy
+    "stream_proxy",
+    "ProxyStreamOptions",
+    "ProxyMessageEventStream",
+    # Parallel
+    "ParallelExecutor",
+    "ParallelToolExecutor",
+    "ParallelTask",
+    "TaskResult",
+    "TaskStatus",
+    "execute_parallel",
+    "execute_with_dependencies",
 ]

@@ -1,112 +1,73 @@
 """
-Edit Operations - Pluggable file operations for Edit tool
+Edit Operations - File operations abstraction
+Equivalent to Pi Mono's packages/coding-agent/src/core/tools/edit-operations.ts
 
-Equivalent to Pi Mono's EditOperations interface
+Supports local filesystem and virtual (in-memory) operations.
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union, Optional, Callable
-import os
+from typing import Protocol, Optional, Dict
 
 
 @dataclass
 class FileStat:
     """File statistics"""
-    size: int
-    mtime: float
-    mode: int
-    exists: bool
+    size: int = 0
+    mtime: float = 0.0
+    mode: int = 0
+    exists: bool = False
 
 
-class EditOperations(ABC):
+class EditOperations(Protocol):
     """
-    Abstract interface for file operations
+    Protocol for pluggable edit operations.
     
-    Allows pluggable implementations for:
-    - Regular filesystem
-    - Virtual filesystem (testing)
-    - Remote filesystem
-    - Git-based versioning
+    Implement this to provide custom file operations,
+    such as SSH-based editing or remote filesystem access.
     """
     
-    @abstractmethod
-    def read_file(self, path: Union[str, Path]) -> str:
-        """Read file content as string"""
-        pass
+    def read_file(self, path: str) -> str:
+        """Read file contents as string"""
+        ...
     
-    @abstractmethod
-    def read_file_bytes(self, path: Union[str, Path]) -> bytes:
-        """Read file content as bytes"""
-        pass
-    
-    @abstractmethod
-    def write_file(self, path: Union[str, Path], content: str) -> None:
+    def write_file(self, path: str, content: str) -> None:
         """Write string content to file"""
-        pass
-    
-    @abstractmethod
-    def write_file_bytes(self, path: Union[str, Path], content: bytes) -> None:
-        """Write bytes content to file"""
-        pass
-    
-    @abstractmethod
-    def file_exists(self, path: Union[str, Path]) -> bool:
-        """Check if file exists"""
-        pass
-    
-    @abstractmethod
-    def access(self, path: Union[str, Path]) -> bool:
-        """Check if file is accessible (readable/writable)"""
-        pass
-    
-    @abstractmethod
-    def stat(self, path: Union[str, Path]) -> FileStat:
-        """Get file statistics"""
-        pass
-    
-    @abstractmethod
-    def mkdir(self, path: Union[str, Path], parents: bool = True) -> None:
-        """Create directory"""
-        pass
+        ...
 
 
-class LocalFileOperations(EditOperations):
-    """
-    Local filesystem operations
-    Default implementation for real file editing
-    """
+class LocalFileOperations:
+    """Default local filesystem operations"""
     
-    def read_file(self, path: Union[str, Path]) -> str:
-        """Read file as UTF-8 text"""
-        return Path(path).read_text(encoding='utf-8')
+    def read_file(self, path) -> str:
+        """Read file contents"""
+        return Path(path).read_text(encoding="utf-8")
     
-    def read_file_bytes(self, path: Union[str, Path]) -> bytes:
+    def read_file_bytes(self, path) -> bytes:
         """Read file as bytes"""
         return Path(path).read_bytes()
     
-    def write_file(self, path: Union[str, Path], content: str) -> None:
-        """Write UTF-8 text to file"""
-        Path(path).write_text(content, encoding='utf-8')
+    def write_file(self, path, content: str) -> None:
+        """Write file contents"""
+        Path(path).write_text(content, encoding="utf-8")
     
-    def write_file_bytes(self, path: Union[str, Path], content: bytes) -> None:
+    def write_file_bytes(self, path, data: bytes) -> None:
         """Write bytes to file"""
-        Path(path).write_bytes(content)
+        Path(path).write_bytes(data)
     
-    def file_exists(self, path: Union[str, Path]) -> bool:
+    def file_exists(self, path) -> bool:
         """Check if file exists"""
         return Path(path).exists()
     
-    def access(self, path: Union[str, Path]) -> bool:
-        """Check file accessibility"""
-        p = Path(path)
-        return p.exists() and os.access(p, os.R_OK | os.W_OK)
+    def access(self, path) -> bool:
+        """Check if path is accessible"""
+        return Path(path).exists()
     
-    def stat(self, path: Union[str, Path]) -> FileStat:
+    def stat(self, path) -> FileStat:
         """Get file stats"""
         p = Path(path)
         if not p.exists():
-            return FileStat(size=0, mtime=0, mode=0, exists=False)
+            return FileStat(exists=False)
         
         s = p.stat()
         return FileStat(
@@ -116,118 +77,183 @@ class LocalFileOperations(EditOperations):
             exists=True
         )
     
-    def mkdir(self, path: Union[str, Path], parents: bool = True) -> None:
+    def mkdir(self, path, parents=False) -> None:
         """Create directory"""
         Path(path).mkdir(parents=parents, exist_ok=True)
 
 
-class VirtualFileOperations(EditOperations):
-    """
-    In-memory virtual filesystem for testing
-    """
+class VirtualFileOperations:
+    """Virtual in-memory file operations for testing"""
     
-    def __init__(self, files: Optional[dict] = None):
-        self._files: dict = files or {}
-        self._stats: dict = {}
+    def __init__(self):
+        self._files: Dict[str, bytes] = {}
     
-    def read_file(self, path: Union[str, Path]) -> str:
-        """Read from virtual filesystem"""
-        key = str(path)
-        if key not in self._files:
+    def read_file(self, path: str) -> str:
+        """Read file contents"""
+        path = str(path)
+        if path not in self._files:
             raise FileNotFoundError(f"File not found: {path}")
-        content = self._files[key]
-        return content if isinstance(content, str) else content.decode('utf-8')
+        return self._files[path].decode("utf-8")
     
-    def read_file_bytes(self, path: Union[str, Path]) -> bytes:
-        """Read bytes from virtual filesystem"""
-        key = str(path)
-        if key not in self._files:
+    def read_file_bytes(self, path: str) -> bytes:
+        """Read file as bytes"""
+        path = str(path)
+        if path not in self._files:
             raise FileNotFoundError(f"File not found: {path}")
-        content = self._files[key]
-        return content.encode('utf-8') if isinstance(content, str) else content
+        return self._files[path]
     
-    def write_file(self, path: Union[str, Path], content: str) -> None:
-        """Write to virtual filesystem"""
-        self._files[str(path)] = content
-        self._stats[str(path)] = FileStat(
-            size=len(content.encode('utf-8')),
-            mtime=__import__('time').time(),
-            mode=0o644,
-            exists=True
-        )
+    def write_file(self, path: str, content: str) -> None:
+        """Write file contents"""
+        self._files[str(path)] = content.encode("utf-8")
     
-    def write_file_bytes(self, path: Union[str, Path], content: bytes) -> None:
-        """Write bytes to virtual filesystem"""
-        self._files[str(path)] = content
-        self._stats[str(path)] = FileStat(
-            size=len(content),
-            mtime=__import__('time').time(),
-            mode=0o644,
-            exists=True
-        )
+    def write_file_bytes(self, path: str, data: bytes) -> None:
+        """Write bytes to file"""
+        self._files[str(path)] = data
     
-    def file_exists(self, path: Union[str, Path]) -> bool:
-        """Check virtual file existence"""
+    def file_exists(self, path: str) -> bool:
+        """Check if file exists"""
         return str(path) in self._files
     
-    def access(self, path: Union[str, Path]) -> bool:
-        """Virtual files are always accessible"""
-        return self.file_exists(path)
+    def access(self, path: str) -> bool:
+        """Check if path is accessible"""
+        return str(path) in self._files
     
-    def stat(self, path: Union[str, Path]) -> FileStat:
-        """Get virtual file stats"""
-        key = str(path)
-        if key in self._stats:
-            return self._stats[key]
-        return FileStat(size=0, mtime=0, mode=0, exists=False)
+    def stat(self, path: str) -> FileStat:
+        """Get file stats"""
+        path = str(path)
+        if path not in self._files:
+            return FileStat(exists=False)
+        
+        data = self._files[path]
+        return FileStat(
+            size=len(data),
+            mtime=0,
+            mode=0o644,
+            exists=True
+        )
     
-    def mkdir(self, path: Union[str, Path], parents: bool = True) -> None:
-        """No-op for virtual filesystem"""
+    def mkdir(self, path, parents=False) -> None:
+        """Create directory (no-op for virtual fs)"""
         pass
     
-    def add_file(self, path: Union[str, Path], content: Union[str, bytes]) -> None:
-        """Helper to add files for testing"""
-        if isinstance(content, str):
-            self.write_file(path, content)
-        else:
-            self.write_file_bytes(path, content)
+    def add_file(self, path: str, content: str) -> None:
+        """Helper to add a file"""
+        self.write_file(path, content)
     
-    def get_file(self, path: Union[str, Path]) -> Optional[str]:
-        """Helper to get file content"""
-        key = str(path)
-        if key in self._files:
-            content = self._files[key]
-            return content if isinstance(content, str) else content.decode('utf-8')
-        return None
+    def get_file(self, path: str) -> Optional[str]:
+        """Helper to get file content or None"""
+        try:
+            return self.read_file(path)
+        except FileNotFoundError:
+            return None
     
     def list_files(self) -> list:
-        """List all files in virtual filesystem"""
+        """List all files"""
         return list(self._files.keys())
 
 
+# Backward compatibility
+LocalEditOperations = LocalFileOperations
+
+
 class EditOperationsFactory:
-    """Factory for creating EditOperations instances"""
+    """Factory for creating edit operations"""
     
-    _default: Optional[EditOperations] = None
-    
-    @classmethod
-    def get_default(cls) -> EditOperations:
-        """Get default (local filesystem) operations"""
-        if cls._default is None:
-            cls._default = LocalFileOperations()
-        return cls._default
-    
-    @classmethod
-    def set_default(cls, operations: EditOperations) -> None:
-        """Set default operations"""
-        cls._default = operations
+    _default: Optional[LocalFileOperations] = None
     
     @classmethod
     def create_local(cls) -> LocalFileOperations:
-        """Create local filesystem operations"""
+        """Create local file operations"""
         return LocalFileOperations()
     
     @classmethod
-    def create_virtual(cls, files: Optional[dict] = None) -> VirtualFileOperations:
-        """Create virtual filesystem for testing"""
-        return VirtualFileOperations(files)
+    def create_virtual(cls, initial_files: Optional[Dict[str, str]] = None) -> VirtualFileOperations:
+        """Create virtual file operations"""
+        vfs = VirtualFileOperations()
+        if initial_files:
+            for path, content in initial_files.items():
+                vfs.write_file(path, content)
+        return vfs
+    
+    @classmethod
+    def get_default(cls) -> LocalFileOperations:
+        """Get default operations (singleton)"""
+        if cls._default is None:
+            cls._default = cls.create_local()
+        return cls._default
+    
+    @classmethod
+    def set_default(cls, ops) -> None:
+        """Set default operations"""
+        cls._default = ops
+
+
+class EditOperationsRegistry:
+    """Registry for pluggable edit operations"""
+    
+    def __init__(self):
+        self._operations = LocalFileOperations()
+    
+    def register(self, operations) -> None:
+        """Register custom operations"""
+        self._operations = operations
+    
+    def get(self):
+        """Get current operations"""
+        return self._operations
+    
+    def reset(self) -> None:
+        """Reset to default local operations"""
+        self._operations = LocalFileOperations()
+
+
+# Global registry instance
+_registry = EditOperationsRegistry()
+
+
+def get_edit_operations():
+    """Get current edit operations"""
+    return _registry.get()
+
+
+def set_edit_operations(operations) -> None:
+    """Set custom edit operations"""
+    _registry.register(operations)
+
+
+def reset_edit_operations() -> None:
+    """Reset to default local operations"""
+    _registry.reset()
+
+
+# Convenience functions that use the registry
+async def read_file(path: str) -> bytes:
+    """Read file using current operations"""
+    return await get_edit_operations().read_file(path)
+
+
+async def write_file(path: str, content: str) -> None:
+    """Write file using current operations"""
+    return await get_edit_operations().write_file(path, content)
+
+
+async def access(path: str) -> None:
+    """Check access using current operations"""
+    return await get_edit_operations().access(path)
+
+
+__all__ = [
+    "FileStat",
+    "EditOperations",
+    "LocalFileOperations",
+    "LocalEditOperations",
+    "VirtualFileOperations",
+    "EditOperationsFactory",
+    "EditOperationsRegistry",
+    "get_edit_operations",
+    "set_edit_operations",
+    "reset_edit_operations",
+    "read_file",
+    "write_file",
+    "access",
+]

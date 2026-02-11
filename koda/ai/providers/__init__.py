@@ -5,12 +5,24 @@ Refactored providers with full Pi Mono parity
 """
 
 # V2 Providers (new base class)
-from koda.ai.providers.openai_provider_v2 import OpenAIProviderV2
-from koda.ai.providers.openai_responses import OpenAIResponsesProvider
-from koda.ai.providers.azure_provider import AzureOpenAIProvider
-from koda.ai.providers.anthropic_provider_v2 import AnthropicProviderV2
-from koda.ai.providers.google_provider import GoogleProvider
-from koda.ai.providers.bedrock_provider import BedrockProvider
+try:
+    from koda.ai.providers.openai_provider_v2 import OpenAIProviderV2
+    from koda.ai.providers.openai_responses import OpenAIResponsesProvider
+    from koda.ai.providers.azure_provider import AzureOpenAIProvider
+    from koda.ai.providers.anthropic_provider_v2 import AnthropicProviderV2
+    from koda.ai.providers.google_provider import GoogleProvider
+    from koda.ai.providers.bedrock_provider import BedrockProvider
+    from koda.ai.providers.gemini_cli_provider import GeminiCLIProvider
+    HAS_V2_PROVIDERS = True
+except ImportError:
+    HAS_V2_PROVIDERS = False
+    OpenAIProviderV2 = None
+    OpenAIResponsesProvider = None
+    AzureOpenAIProvider = None
+    AnthropicProviderV2 = None
+    GoogleProvider = None
+    BedrockProvider = None
+    GeminiCLIProvider = None
 
 # Legacy providers (backward compatibility)
 from koda.ai.providers.openai_provider import OpenAIProvider
@@ -25,6 +37,7 @@ __all__ = [
     "AnthropicProviderV2",
     "GoogleProvider",
     "BedrockProvider",
+    "GeminiCLIProvider",
     # Legacy providers
     "OpenAIProvider",
     "AnthropicProvider",
