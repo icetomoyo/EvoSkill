@@ -4,7 +4,7 @@ Kimi Provider
 Supports Moonshot Kimi API (including Kimi For Coding).
 """
 import json
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from koda.ai.provider import LLMProvider, Message, Model, StreamEvent, ToolCall, Usage
 
@@ -12,28 +12,54 @@ from koda.ai.provider import LLMProvider, Message, Model, StreamEvent, ToolCall,
 class KimiProvider(LLMProvider):
     """
     Moonshot Kimi provider
-    
+
     Supports:
     - Kimi K2.5 (256K context)
     - Kimi For Coding (special API)
     - Standard Kimi models
     """
-    
+
     DEFAULT_BASE_URL = "https://api.moonshot.cn/v1"
     CODING_BASE_URL = "https://api.kimi.com/coding/v1"
-    
-    def __init__(self, api_key: str, base_url: Optional[str] = None, **kwargs):
+
+    def __init__(
+        self,
+        api_key: str,
+        base_url: Optional[str] = None,
+        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        **kwargs
+    ):
         # Auto-detect Kimi For Coding
         self.is_coding = kwargs.get("for_coding", False) or "kimi.com/coding" in (base_url or "")
-        
+
         if self.is_coding and not base_url:
             base_url = self.CODING_BASE_URL
         elif not base_url:
             base_url = self.DEFAULT_BASE_URL
-        
+
         super().__init__(api_key, base_url, **kwargs)
         self._client = None
-    
+        self._proxy = proxy
+
+    def _get_proxy_config(self):
+        """Get proxy configuration for httpx client"""
+        if self._proxy is None:
+            # Try to load from environment
+            from koda.ai.http_proxy import load_proxy_from_env
+            proxy_config = load_proxy_from_env()
+            if proxy_config:
+                return proxy_config.url
+            return None
+
+        if isinstance(self._proxy, str):
+            return self._proxy
+
+        if isinstance(self._proxy, dict):
+            # Format: {"http://": "...", "https://": "..."}
+            return self._proxy
+
+        return None
+
     def _get_client(self):
         """Lazy initialization"""
         if self._client is None:
@@ -41,17 +67,32 @@ class KimiProvider(LLMProvider):
                 from openai import AsyncOpenAI
             except ImportError:
                 raise ImportError("openai package required. Install: pip install openai")
-            
+
             # Kimi For Coding needs special headers
             headers = {}
             if self.is_coding:
                 headers["User-Agent"] = "Kimi-CLI/1.0"
-            
-            self._client = AsyncOpenAI(
-                api_key=self.api_key,
-                base_url=self.base_url,
-                default_headers=headers,
-            )
+
+            # Configure proxy if available
+            client_kwargs = {
+                "api_key": self.api_key,
+                "base_url": self.base_url,
+                "default_headers": headers,
+            }
+
+            proxy_url = self._get_proxy_config()
+            if proxy_url:
+                try:
+                    import httpx
+                    client_kwargs["http_client"] = httpx.AsyncClient(
+                        proxy=proxy_url,
+                        timeout=httpx.Timeout(60.0, connect=30.0)
+                    )
+                except ImportError:
+                    # httpx not available, continue without proxy
+                    pass
+
+            self._client = AsyncOpenAI(**client_kwargs)
         return self._client
     
     async def chat(

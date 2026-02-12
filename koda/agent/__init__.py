@@ -3,12 +3,29 @@ Koda Agent - Enhanced Agent Framework
 
 Event-driven agent with message queue, tool registry, and state management.
 Based on Pi Mono's agent package.
+
+P1/P2 Enhancements:
+- AgentMessage union type for flexible message handling
+- Dynamic API Key resolution
+- Session ID management with caching
+- Thinking budgets configuration
+- Pending tool calls tracking
 """
 from koda.agent.agent import Agent, AgentConfig, AgentState
 from koda.agent.events import EventBus, Event, EventType
 from koda.agent.tools import ToolRegistry, Tool, ToolContext
 from koda.agent.queue import MessageQueue, QueuedMessage
 from koda.agent.loop import AgentLoop, AgentLoopConfig, AgentTool
+from koda.agent.types import (
+    AgentMessage,
+    ThinkingBudget,
+    PendingToolCall,
+    ImageInput,
+    ApiKeyResolver,
+    SessionCache,
+    normalize_agent_message,
+    create_user_message,
+)
 from koda.agent.stream_proxy import (
     stream_proxy,
     ProxyStreamOptions,
@@ -44,6 +61,15 @@ __all__ = [
     "AgentLoop",
     "AgentLoopConfig",
     "AgentTool",
+    # Types (P1/P2)
+    "AgentMessage",
+    "ThinkingBudget",
+    "PendingToolCall",
+    "ImageInput",
+    "ApiKeyResolver",
+    "SessionCache",
+    "normalize_agent_message",
+    "create_user_message",
     # Stream Proxy
     "stream_proxy",
     "ProxyStreamOptions",

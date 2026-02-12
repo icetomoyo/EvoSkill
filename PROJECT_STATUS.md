@@ -1,8 +1,8 @@
 # EvoSkill / Koda 项目状态总览
 
-> **最后更新**: 2026-02-11  
-> **项目目标**: Pi-Mono 的 Python 实现，提供 AI Agent、Coding Agent 和 Mom (Slack Bot) 功能  
-> **当前完成度**: 80%
+> **最后更新**: 2026-02-12
+> **项目目标**: Pi-Mono 的 Python 实现，提供 AI Agent、Coding Agent 和 Mom（非 Slack Bot）功能
+> **当前完成度**: 65%
 
 ---
 
@@ -13,7 +13,7 @@ Pi-Mono 是一个 TypeScript 编写的 AI 编程助手框架，包含：
 - **ai**: LLM Provider 抽象层，支持 20+ 模型
 - **agent**: Agent 框架，事件循环驱动
 - **coding-agent**: 代码助手，工具系统
-- **mom**: Slack Bot 实现
+- **mom**: Slack Bot 实现（Koda 排除 Slack Bot 集成部分）
 
 ### 为什么需要 Koda?
 将 Pi-Mono 移植到 Python 生态系统，便于：
@@ -42,22 +42,22 @@ EvoSkill/
 ### 总体进度
 
 ```
-AI Core     [████████░░] 85%  - 核心功能完成，生产可用
-Agent       [█████████░] 90%  - 核心完成，有扩展功能
-Coding      [███████░░░] 75%  - 核心完成，扩展系统待完善
-Mom         [████░░░░░░] 40%  - 基础功能，Slack Bot 待实现
+AI Core     [█████████░] 90%  - 核心完整，需补充模型库
+Agent       [███████░░░] 75%  - 缺关键特性 (steering/follow-up)
+Coding      [███████░░░] 70%  - 缺扩展系统 (loader/runner)
+Mom         [█░░░░░░░░░] 10%  - 大部分缺失 (非 Slack Bot 部分)
 ────────────────────────────────────────
-总体        [████████░░] 80%
+总体        [██████░░░░] 65%
 ```
 
 ### 详细进度
 
 | 模块 | 完成度 | 状态 | 关键差距 |
 |------|--------|------|----------|
-| **AI Core** | 85% | 🟢 生产可用 | HTTP代理、部分CLI工具 |
-| **Agent** | 90% | 🟢 生产可用 | 核心功能完整 |
-| **Coding** | 75% | 🟡 可用 | 扩展加载器、完整SDK |
-| **Mom** | 40% | 🔴 不可用 | Slack Bot 核心缺失 |
+| **AI Core** | 90% | 🟢 核心完整 | 完整模型数据库、Partial JSON 解析器 |
+| **Agent** | 75% | 🟡 可用 | steering/follow-up 消息集成 |
+| **Coding** | 70% | 🟡 可用 | 扩展系统 (loader/runner) |
+| **Mom** | 10% | 🔴 大部分缺失 | agent.py, events.py, log.py, tools/ |
 
 ---
 
@@ -159,9 +159,17 @@ Mom         [████░░░░░░] 40%  - 基础功能，Slack Bot 待
 
 ### 5. Mom 模块 (koda/mom/) - 基础
 
-- ✅ 上下文管理
-- ✅ 存储系统
-- ✅ 沙箱
+**注意**: Koda 排除 Slack Bot 集成 (`slack.ts`) 部分
+
+- ✅ 上下文管理 (基础)
+- ✅ 存储系统 (基础)
+- ✅ 沙箱 (基础，无 Docker)
+- ❌ agent.py - Agent 运行器
+- ❌ events.py - 事件调度系统
+- ❌ log.py - 结构化日志
+- ❌ download.py - 历史下载
+- ❌ main.py - CLI 入口
+- ❌ tools/ - Mom 专用工具集
 
 ---
 
@@ -169,49 +177,58 @@ Mom         [████░░░░░░] 40%  - 基础功能，Slack Bot 待
 
 ### P0 - 关键 (阻塞生产使用)
 
-#### Mom Slack Bot
-```
-mom/
-├── agent.py      ❌ 未实现 - Slack Bot Agent 核心
-├── slack.py      ❌ 未实现 - Slack API 集成
-├── events.py     ❌ 未实现 - 事件系统
-├── log.py        ❌ 未实现 - 日志系统
-├── main.py       ❌ 未实现 - 入口点
-└── tools/        ❌ 未实现 - Mom 专用工具
-    ├── attach.ts → attach.py
-    ├── bash.ts   → bash.py
-    ├── edit.ts   → edit.py
-    ├── index.ts  → __init__.py
-    ├── read.ts   → read.py
-    ├── truncate.ts → truncate.py
-    └── write.ts  → write.py
-```
+#### Agent 关键特性 (5项，7天)
+- ❌ `agentLoopContinue()` - 从现有 context 继续执行
+- ❌ Steering 消息集成 - 工具执行中动态转向
+- ❌ Follow-up 消息循环 - 自动继续执行
+- ❌ `convertToLlm` 转换层 - 消息转换/过滤
+- ❌ `transformContext` 预处理 - Context 修剪
 
-#### Coding SDK 完善
-- `coding/sdk.py` - 当前为基础实现，需完善完整接口
+#### AI 模块 (2项，3-5天)
+- ❌ 完整模型数据库 (Pi-mono 301KB，Koda 仅70个硬编码)
+- ❌ Partial JSON 流式解析器
+
+#### Coding 模块 (4项，3.5天)
+- ❌ `config.py` - 配置模块
+- ❌ `main.py` - 主入口点
+- ❌ `core/defaults.py` - 默认值
+- ❌ `core/exec.py` - 执行工具
+
+#### Mom 模块 (5项，13天) - **最大缺口**
+- ❌ `agent.py` (885行) - Agent 运行器
+- ❌ `events.py` (384行) - 事件调度系统
+- ❌ `log.py` (272行) - 结构化日志
+- ❌ `download.py` (118行) - 历史下载
+- ❌ `main.py` (323行) - CLI 入口
+
+**注意**: Slack Bot 集成 (`slack.ts`) 不在实现范围内
 
 ### P1 - 重要 (影响体验)
 
-#### 扩展系统
+#### 扩展系统 (4项，7天)
 ```
 coding/core/extensions/
 ├── loader.py    ❌ 未实现 - 扩展加载器
 ├── runner.py    ❌ 未实现 - 扩展运行器
+├── types.py     ❌ 未实现 - 扩展类型定义
 └── wrapper.py   ⚠️  部分实现 - 扩展包装器
 ```
 
-#### 其他
-- `coding/core/agent_session.py` - Agent 会话核心完善
-- `coding/core/model_registry.py` - 模型注册表
-- `ai/http_proxy.py` - HTTP 代理支持
-- 交互式 TUI 组件
+#### Mom 工具集 (7项，7天)
+- ❌ `tools/__init__.py` - 工具注册
+- ❌ `tools/attach.py` - 文件附件
+- ❌ `tools/bash.py` - Bash 执行
+- ❌ `tools/edit.py` - 精确编辑
+- ❌ `tools/read.py` - 文件读取
+- ❌ `tools/truncate.py` - 截断工具
+- ❌ `tools/write.py` - 文件写入
 
 ### P2 - 可选 (增强功能)
 
 - HTML 导出完整版
 - 图片剪贴板支持
-- 各种辅助工具
-- 诊断系统增强
+- HTTP 代理完善
+- 交互式 TUI 组件 (35个)
 
 ---
 
@@ -313,20 +330,17 @@ coding/core/extensions/
 
 ## 📚 文档导航
 
-### 核心文档
-- `koda/README.md` - Koda 模块文档
-- `koda/ARCHITECTURE.md` - 架构设计
-- `koda/PI_MONO_PARITY.md` - Pi-Mono 对比和完成度
-- `koda/API_REFERENCE.md` - API 参考
+### Koda 核心文档
+- `koda/README.md` - Koda 模块主文档
+- `koda/ARCHITECTURE.md` - Koda 架构设计
+- `koda/PI_MONO_PARITY.md` - Pi-Mono 功能对比和缺失清单
+- `koda/IMPLEMENTATION_PLAN.md` - 完整实施计划和路线图
+- `koda/05_API_REFERENCE.md` - API 参考
 
 ### 项目文档
-- `KODA_STATUS.md` - 项目状态总览
+- `PROJECT_STATUS.md` - 本文档（项目状态总览）
 - `KODA_TEST_REPORT.md` - 测试验证报告
-- `KODA_PI_MONO_COMPARISON_REPORT.md` - 详细对比报告
-- `PROJECT_STATUS.md` - 本文档
-
-### 归档文档
-- `koda/docs/archive/` - 历史文档
+- `docs/` - EvoSkill 设计文档
 
 ---
 
@@ -481,5 +495,6 @@ chore: 杂项
 
 ---
 
-*本文档最后更新: 2026-02-11*
-*版本: v0.8.0*
+*本文档最后更新: 2026-02-12*
+*版本: v0.65.0 (65% Pi-Mono parity)*
+*详细实施计划: koda/IMPLEMENTATION_PLAN.md*

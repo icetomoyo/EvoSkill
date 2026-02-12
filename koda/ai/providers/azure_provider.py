@@ -3,6 +3,7 @@ Azure OpenAI Provider - Azure OpenAI Service
 Supports: chat completions with Azure-specific authentication
 Equivalent to Pi Mono's azure-openai-responses.ts
 """
+import asyncio
 import json
 import os
 from typing import Optional, Dict, Any
@@ -25,28 +26,29 @@ from koda.ai.event_stream import AssistantMessageEventStream, EventType
 class AzureOpenAIProvider(BaseProvider):
     """
     Azure OpenAI Service Provider
-    
+
     Features:
     - Azure AD authentication (preferred)
     - API Key authentication
     - Regional endpoints
     - Deployments (mapped to models)
-    
+
     Environment variables:
     - AZURE_OPENAI_ENDPOINT: https://{resource}.openai.azure.com
     - AZURE_OPENAI_API_KEY: API key (if not using Azure AD)
     - AZURE_OPENAI_AD_TOKEN: Azure AD token
     """
-    
+
     def __init__(self, config: Optional[ProviderConfig] = None):
         super().__init__(config)
-        
+
         # Azure endpoint format: https://{resource}.openai.azure.com/openai/deployments/{deployment}
         self.endpoint = config.base_url if config and config.base_url else os.getenv("AZURE_OPENAI_ENDPOINT")
         self.api_key = config.api_key if config and config.api_key else os.getenv("AZURE_OPENAI_API_KEY")
         self.ad_token = os.getenv("AZURE_OPENAI_AD_TOKEN")
         self.api_version = "2024-10-21"  # Latest stable
-        
+        self._aiohttp_session = None
+
         if not self.endpoint:
             raise ValueError("Azure OpenAI endpoint required. Set AZURE_OPENAI_ENDPOINT or config.base_url")
     
@@ -92,20 +94,20 @@ class AzureOpenAIProvider(BaseProvider):
         try:
             message = self._create_initial_message(model)
             self._emit_start(stream, message)
-            
+
             # Build request
             payload = self._build_payload(model, context, options)
-            
+
             # Build URL with deployment
             # model.id is the deployment name in Azure
             url = f"{self.endpoint}/openai/deployments/{model.id}/chat/completions"
             url += f"?api-version={self.api_version}"
-            
+
             # Headers
             headers = {
                 "Content-Type": "application/json",
             }
-            
+
             # Authentication priority: AD Token > API Key
             if self.ad_token:
                 headers["Authorization"] = f"Bearer {self.ad_token}"
@@ -113,15 +115,30 @@ class AzureOpenAIProvider(BaseProvider):
                 headers["api-key"] = self.api_key
             else:
                 raise ValueError("Azure OpenAI requires api-key or Azure AD token")
-            
+
             if options and options.headers:
                 headers.update(options.headers)
-            
-            async with aiohttp.ClientSession() as session:
+
+            # Get proxy configuration
+            proxy_config = self.get_proxy_config()
+            proxy_url = None
+
+            # Create session with proxy support
+            if proxy_config and self.should_use_proxy(url):
+                from koda.ai.http_proxy import create_proxy_session
+                session, proxy_url = await create_proxy_session(
+                    proxy_config=proxy_config,
+                    headers=headers,
+                    trust_env=False
+                )
+            else:
+                session = aiohttp.ClientSession(headers=headers)
+
+            try:
                 async with session.post(
                     url,
-                    headers=headers,
                     json=payload,
+                    proxy=proxy_url,
                     timeout=aiohttp.ClientTimeout(total=self.config.timeout)
                 ) as response:
                     if response.status != 200:
@@ -216,9 +233,12 @@ class AzureOpenAIProvider(BaseProvider):
                                     stop_reason = self._map_finish_reason(finish_reason)
                                     self._emit_done(stream, message, stop_reason)
                                     return
-            
-            self._emit_done(stream, message, StopReason.STOP)
-            
+
+                self._emit_done(stream, message, StopReason.STOP)
+
+            finally:
+                await session.close()
+
         except Exception as e:
             self._emit_error(stream, message if 'message' in locals() else AssistantMessage(), e)
     
@@ -339,6 +359,3 @@ class AzureOpenAIProvider(BaseProvider):
             context_window=128000,
             max_tokens=16384,
         )
-
-
-import asyncio

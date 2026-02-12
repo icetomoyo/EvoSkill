@@ -33,18 +33,21 @@ from .retry import RetryHandler, RetryConfig, RetryStrategy, CircuitBreaker, Cir
 from .env_api_keys import EnvAPIKeyManager, get_api_key, has_api_key, get_all_api_keys
 from .sanitize_unicode import sanitize_surrogates, sanitize_for_json
 from .typebox_helpers import SchemaBuilder, Validator, ValidationResult, validate_json
+from .http_proxy import (
+    ProxyProtocol,
+    ProxyAuth,
+    ProxyConfig,
+    ProxySessionManager,
+    load_proxy_from_env,
+    get_proxy_config,
+    create_proxy_session,
+    get_proxy_headers,
+)
 from .models import (
     MODELS,
-    get_model,
-    get_models,
-    get_providers,
+    get_model_info,
     ModelRegistry,
-    register_model,
-    find_models,
-    calculate_cost,
-    CostBreakdown,
-    supports_xhigh,
-    models_are_equal,
+    get_model_registry,
 )
 
 __all__ = [
@@ -126,16 +129,18 @@ __all__ = [
     "Validator",
     "ValidationResult",
     "validate_json",
+    # HTTP Proxy
+    "ProxyProtocol",
+    "ProxyAuth",
+    "ProxyConfig",
+    "ProxySessionManager",
+    "load_proxy_from_env",
+    "get_proxy_config",
+    "create_proxy_session",
+    "get_proxy_headers",
     # Models
     "MODELS",
-    "get_model",
-    "get_models",
-    "get_providers",
+    "get_model_info",
     "ModelRegistry",
-    "register_model",
-    "find_models",
-    "calculate_cost",
-    "CostBreakdown",
-    "supports_xhigh",
-    "models_are_equal",
+    "get_model_registry",
 ]

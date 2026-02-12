@@ -3,8 +3,8 @@ Koda AI Provider Base - Provider Base Class
 Defines standardized Provider interface
 """
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List, Callable, TYPE_CHECKING
-from dataclasses import dataclass
+from typing import Optional, Dict, Any, List, Callable, TYPE_CHECKING, Union
+from dataclasses import dataclass, field
 import time
 
 from koda.ai.types import (
@@ -22,6 +22,7 @@ from koda.ai.types import (
 
 if TYPE_CHECKING:
     from koda.ai.event_stream import AssistantMessageEventStream
+    from koda.ai.http_proxy import ProxyConfig
 
 from koda.ai.event_stream import EventType, AssistantMessageEvent
 
@@ -35,19 +36,28 @@ class ProviderConfig:
     max_retries: int = 3
     headers: Optional[Dict[str, str]] = None
 
+    # Proxy configuration
+    proxy: Optional[Union[str, "ProxyConfig"]] = None
+    """Proxy URL or ProxyConfig for HTTP requests"""
+
+    proxy_enabled: bool = True
+    """Whether to use proxy for requests (default: True if proxy is configured)"""
+
 
 class BaseProvider(ABC):
     """
     Standardized Provider Base Class
-    
+
     All LLM Providers must inherit from this class
     Equivalent to Pi Mono's Provider interface
     """
-    
+
     def __init__(self, config: Optional[ProviderConfig] = None):
         self.config = config or ProviderConfig()
         self._rate_limit_remaining: Optional[int] = None
         self._rate_limit_reset: Optional[int] = None
+        self._proxy_config: Optional["ProxyConfig"] = None
+        self._session_manager = None
     
     @property
     @abstractmethod
@@ -160,7 +170,74 @@ class BaseProvider(ABC):
         if self.config.api_key:
             return {"Authorization": f"Bearer {self.config.api_key}"}
         return None
-    
+
+    def get_proxy_config(self) -> Optional["ProxyConfig"]:
+        """
+        Get proxy configuration for this provider
+
+        Returns:
+            ProxyConfig if proxy is configured, None otherwise
+        """
+        if self._proxy_config:
+            return self._proxy_config
+
+        # Import here to avoid circular imports
+        from koda.ai.http_proxy import ProxyConfig, load_proxy_from_env
+
+        # Check if proxy is configured in provider config
+        if self.config.proxy:
+            if isinstance(self.config.proxy, ProxyConfig):
+                self._proxy_config = self.config.proxy
+            elif isinstance(self.config.proxy, str):
+                self._proxy_config = ProxyConfig.from_url(self.config.proxy)
+            return self._proxy_config
+
+        # Fall back to environment variables if proxy is enabled
+        if self.config.proxy_enabled:
+            self._proxy_config = load_proxy_from_env()
+
+        return self._proxy_config
+
+    def should_use_proxy(self, url: str) -> bool:
+        """
+        Check if proxy should be used for a given URL
+
+        Args:
+            url: Target URL
+
+        Returns:
+            True if proxy should be used, False otherwise
+        """
+        if not self.config.proxy_enabled:
+            return False
+
+        proxy_config = self.get_proxy_config()
+        if not proxy_config:
+            return False
+
+        return proxy_config.should_use_proxy(url)
+
+    async def get_proxy_session_manager(self):
+        """
+        Get or create a ProxySessionManager for HTTP requests
+
+        Returns:
+            ProxySessionManager instance
+        """
+        if self._session_manager is None:
+            from koda.ai.http_proxy import ProxySessionManager
+            self._session_manager = ProxySessionManager(
+                proxy_config=self.get_proxy_config(),
+                trust_env=self.config.proxy_enabled
+            )
+        return self._session_manager
+
+    async def close_proxy_session(self):
+        """Close the proxy session if it exists"""
+        if self._session_manager:
+            await self._session_manager.close()
+            self._session_manager = None
+
     def _apply_rate_limits(self, headers: Dict[str, str]) -> None:
         """
         Extract rate limit information from response headers

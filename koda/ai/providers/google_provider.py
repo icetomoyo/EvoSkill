@@ -2,6 +2,7 @@
 Google Provider - Gemini API, Vertex AI, and Gemini CLI
 Supports: text, vision, tools, streaming
 """
+import asyncio
 import json
 import os
 from typing import Optional, Dict, Any, List
@@ -26,19 +27,19 @@ from koda.ai.event_stream import AssistantMessageEventStream, EventType
 class GoogleProvider(BaseProvider):
     """
     Google Generative AI Provider
-    
+
     Supports:
     - Gemini API (google-generative-ai)
     - Vertex AI (google-vertex)
     - Gemini CLI (google-gemini-cli)
-    
+
     Equivalent to Pi Mono's google*.ts files
     """
-    
+
     def __init__(self, config: Optional[ProviderConfig] = None, api_type: str = "google-generative-ai"):
         super().__init__(config)
         self._api_type = api_type
-        
+
         if config and config.base_url:
             self.base_url = config.base_url
         elif api_type == "google-generative-ai":
@@ -50,8 +51,9 @@ class GoogleProvider(BaseProvider):
             self.base_url = f"https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}"
         else:
             self.base_url = "https://generativelanguage.googleapis.com/v1beta"
-        
+
         self.api_key = config.api_key if config and config.api_key else os.getenv("GOOGLE_API_KEY")
+        self._aiohttp_session = None
     
     @property
     def api_type(self) -> str:
@@ -95,10 +97,10 @@ class GoogleProvider(BaseProvider):
         try:
             message = self._create_initial_message(model)
             self._emit_start(stream, message)
-            
+
             # Build request
             payload = self._build_payload(model, context, options)
-            
+
             # Determine endpoint
             if self._api_type == "google-generative-ai":
                 endpoint = f"{self.base_url}/models/{model.id}:streamGenerateContent?key={self.api_key}"
@@ -107,12 +109,27 @@ class GoogleProvider(BaseProvider):
                 # Vertex AI
                 endpoint = f"{self.base_url}/publishers/google/models/{model.id}:streamGenerateContent"
                 headers = self._get_vertex_headers()
-            
-            async with aiohttp.ClientSession() as session:
+
+            # Get proxy configuration
+            proxy_config = self.get_proxy_config()
+            proxy_url = None
+
+            # Create session with proxy support
+            if proxy_config and self.should_use_proxy(endpoint):
+                from koda.ai.http_proxy import create_proxy_session
+                session, proxy_url = await create_proxy_session(
+                    proxy_config=proxy_config,
+                    headers=headers,
+                    trust_env=False
+                )
+            else:
+                session = aiohttp.ClientSession(headers=headers)
+
+            try:
                 async with session.post(
                     endpoint,
-                    headers=headers,
                     json=payload,
+                    proxy=proxy_url,
                     timeout=aiohttp.ClientTimeout(total=self.config.timeout)
                 ) as response:
                     if response.status != 200:
@@ -202,7 +219,10 @@ class GoogleProvider(BaseProvider):
                     if has_started:
                         self._emit_text_end(stream, message, len(message.content) - 1, content_buffer)
                     self._emit_done(stream, message, StopReason.STOP)
-        
+
+            finally:
+                await session.close()
+
         except Exception as e:
             self._emit_error(stream, message if 'message' in locals() else AssistantMessage(), e)
     
@@ -317,13 +337,10 @@ class GoogleProvider(BaseProvider):
     def _get_vertex_headers(self) -> Dict[str, str]:
         """Get headers for Vertex AI authentication"""
         headers = {"Content-Type": "application/json"}
-        
+
         # Try to get token from gcloud or environment
         token = os.getenv("GOOGLE_ACCESS_TOKEN")
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        
+
         return headers
-
-
-import asyncio

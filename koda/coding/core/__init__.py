@@ -18,6 +18,26 @@ from .diagnostics import (
     Diagnostics,
     run_diagnostics,
 )
+from .exec import (
+    # Core classes
+    ToolExecutor,
+    SyncToolExecutor,
+    ExecutionConfig,
+    RetryConfig,
+    ExecutionContext,
+    ExecutionResult,
+    ExecutionError,
+    ExecutionStatus,
+    ErrorCategory,
+    # Logging
+    ExecutionLogger,
+    ExecutionLog,
+    # Formatting
+    ResultFormatter,
+    # Convenience functions
+    execute_tool,
+    execute_tool_sync,
+)
 
 __all__ = [
     # Event Bus
@@ -32,4 +52,19 @@ __all__ = [
     "DiagnosticResult",
     "Diagnostics",
     "run_diagnostics",
+    # Tool Execution
+    "ToolExecutor",
+    "SyncToolExecutor",
+    "ExecutionConfig",
+    "RetryConfig",
+    "ExecutionContext",
+    "ExecutionResult",
+    "ExecutionError",
+    "ExecutionStatus",
+    "ErrorCategory",
+    "ExecutionLogger",
+    "ExecutionLog",
+    "ResultFormatter",
+    "execute_tool",
+    "execute_tool_sync",
 ]

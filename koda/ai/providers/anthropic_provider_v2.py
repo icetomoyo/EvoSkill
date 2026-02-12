@@ -1,10 +1,12 @@
 """
 Anthropic Provider V2 - Refactored with full Pi Mono parity
-Supports: messages API, thinking, caching, tools, vision
+Supports: messages API, thinking, caching, tools, vision, adaptive thinking, effort levels
 """
 import json
 import os
-from typing import Optional, Dict, Any, List
+import asyncio
+from typing import Optional, Dict, Any, List, Literal
+from dataclasses import dataclass
 import aiohttp
 
 from koda.ai.types import (
@@ -13,6 +15,7 @@ from koda.ai.types import (
     Usage,
     AssistantMessage,
     StreamOptions,
+    SimpleStreamOptions,
     ThinkingLevel,
     StopReason,
     TextContent,
@@ -24,25 +27,61 @@ from koda.ai.provider_base import BaseProvider, ProviderConfig
 from koda.ai.event_stream import AssistantMessageEventStream, EventType
 
 
+@dataclass
+class ThinkingBudget:
+    """Thinking budget configuration"""
+    minimal: int = 1024
+    low: int = 2048
+    medium: int = 8192
+    high: int = 16384
+    xhigh: int = 32768
+    adaptive: int = -1  # -1 means adaptive
+
+
+# Model-specific thinking budgets
+MODEL_THINKING_BUDGETS: Dict[str, ThinkingBudget] = {
+    "claude-opus-4-5": ThinkingBudget(minimal=2048, low=4096, medium=16384, high=32768, xhigh=65536),
+    "claude-opus-4": ThinkingBudget(minimal=2048, low=4096, medium=16384, high=32768, xhigh=65536),
+    "claude-sonnet-4": ThinkingBudget(minimal=1024, low=2048, medium=8192, high=16384, xhigh=32768),
+    "claude-3-7-sonnet": ThinkingBudget(minimal=1024, low=2048, medium=8192, high=16384, xhigh=32768),
+    "default": ThinkingBudget(),
+}
+
+
+@dataclass
+class ClaudeCodeConfig:
+    """Claude Code specific configuration"""
+    stealth_mode: bool = False  # When True, minimize identifiable patterns
+    adaptive_thinking: bool = True  # Enable adaptive thinking budget
+    max_thinking_tokens: int = 65536  # Maximum thinking tokens
+
+
 class AnthropicProviderV2(BaseProvider):
     """
     Anthropic Messages API Provider
-    
+
     Supports:
-    - Claude 3/3.5 models
-    - Extended thinking (reasoning)
+    - Claude 3/3.5/4/4.5 models
+    - Extended thinking (reasoning) with adaptive budgets
     - Prompt caching
     - Vision
     - Tool use
     - Streaming
-    
+    - Claude Code stealth mode
+    - Effort level mapping for thinking
+
     Equivalent to Pi Mono's anthropic.ts
     """
-    
-    def __init__(self, config: Optional[ProviderConfig] = None):
+
+    def __init__(
+        self,
+        config: Optional[ProviderConfig] = None,
+        claude_code_config: Optional[ClaudeCodeConfig] = None
+    ):
         super().__init__(config)
         self.base_url = config.base_url if config and config.base_url else "https://api.anthropic.com/v1"
         self.api_key = config.api_key if config and config.api_key else os.getenv("ANTHROPIC_API_KEY")
+        self.claude_code = claude_code_config or ClaudeCodeConfig()
     
     @property
     def api_type(self) -> str:
@@ -255,34 +294,55 @@ class AnthropicProviderV2(BaseProvider):
             "stream": True,
             "messages": self._convert_messages(context.messages),
         }
-        
+
         # Add system prompt
         if context.system_prompt:
             payload["system"] = context.system_prompt
-        
+
         # Add options
         if options:
             if options.temperature is not None:
                 payload["temperature"] = options.temperature
-            
-            # Handle thinking/reasoning
+
+            # Handle thinking/reasoning with adaptive budgets
+            thinking_level = None
             if hasattr(options, 'reasoning') and options.reasoning:
-                # Map thinking level to effort
+                thinking_level = options.reasoning
+            elif isinstance(options, SimpleStreamOptions) and options.reasoning:
+                thinking_level = options.reasoning
+
+            if thinking_level and self._supports_extended_thinking(model.id):
+                # Get thinking budget for this model
+                budget = self._get_thinking_budget(model.id, thinking_level)
+
+                # Effort level mapping (for Claude 4.5+ adaptive thinking)
                 effort_map = {
-                    "minimal": "low",
-                    "low": "low",
-                    "medium": "medium",
-                    "high": "high",
-                    "xhigh": "max",
+                    ThinkingLevel.MINIMAL: "minimal",
+                    ThinkingLevel.LOW: "low",
+                    ThinkingLevel.MEDIUM: "medium",
+                    ThinkingLevel.HIGH: "high",
+                    ThinkingLevel.XHIGH: "max",
                 }
-                effort = effort_map.get(options.reasoning, "medium")
-                
-                # Thinking config (Claude 3.7+)
-                payload["thinking"] = {
+
+                if isinstance(thinking_level, str):
+                    thinking_level = ThinkingLevel(thinking_level)
+
+                effort = effort_map.get(thinking_level, "medium")
+
+                # Thinking config
+                thinking_config: Dict[str, Any] = {
                     "type": "enabled",
-                    "budget_tokens": 16000  # Default thinking budget
                 }
-            
+
+                # For Claude 4.5+ with adaptive thinking, use effort instead of budget_tokens
+                if self._supports_adaptive_thinking(model.id) and self.claude_code.adaptive_thinking:
+                    thinking_config["effort"] = effort
+                else:
+                    # Use fixed budget tokens for older models
+                    thinking_config["budget_tokens"] = min(budget, self.claude_code.max_thinking_tokens)
+
+                payload["thinking"] = thinking_config
+
             # Handle cache retention
             if options.cache_retention and options.cache_retention != "none":
                 # Add cache control to last user message
@@ -297,7 +357,7 @@ class AnthropicProviderV2(BaseProvider):
                         payload["messages"][-1]["content"] = [
                             {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
                         ]
-        
+
         # Add tools
         if context.tools:
             payload["tools"] = [
@@ -308,8 +368,52 @@ class AnthropicProviderV2(BaseProvider):
                 }
                 for tool in context.tools
             ]
-        
+
+        # Claude Code stealth mode modifications
+        if self.claude_code.stealth_mode:
+            # Add extra headers for stealth mode
+            if "extra_headers" not in payload:
+                payload["extra_headers"] = {}
+            payload["extra_headers"]["anthropic-beta"] = "claude-code-stealth-1"
+
         return payload
+
+    def _supports_extended_thinking(self, model_id: str) -> bool:
+        """Check if model supports extended thinking"""
+        thinking_models = [
+            "claude-opus-4-5",
+            "claude-opus-4",
+            "claude-sonnet-4",
+            "claude-3-7-sonnet",
+        ]
+        return any(m in model_id for m in thinking_models)
+
+    def _supports_adaptive_thinking(self, model_id: str) -> bool:
+        """Check if model supports adaptive thinking (Claude 4.5+)"""
+        adaptive_models = [
+            "claude-opus-4-5",
+            "claude-4-5",
+        ]
+        return any(m in model_id for m in adaptive_models)
+
+    def _get_thinking_budget(self, model_id: str, level: ThinkingLevel) -> int:
+        """Get thinking budget for model and level"""
+        # Find model-specific budget or use default
+        for model_prefix, budget in MODEL_THINKING_BUDGETS.items():
+            if model_prefix in model_id:
+                break
+        else:
+            budget = MODEL_THINKING_BUDGETS["default"]
+
+        # Map level to budget value
+        level_map = {
+            ThinkingLevel.MINIMAL: budget.minimal,
+            ThinkingLevel.LOW: budget.low,
+            ThinkingLevel.MEDIUM: budget.medium,
+            ThinkingLevel.HIGH: budget.high,
+            ThinkingLevel.XHIGH: budget.xhigh,
+        }
+        return level_map.get(level, budget.medium)
     
     def _convert_messages(self, messages: list) -> list:
         """Convert messages to Anthropic format"""
@@ -389,6 +493,3 @@ class AnthropicProviderV2(BaseProvider):
                 })
         
         return result if len(result) > 1 else result[0] if result else ""
-
-
-import asyncio

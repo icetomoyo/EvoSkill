@@ -4,7 +4,7 @@ Anthropic Provider
 Supports Claude models with thinking/reasoning capabilities.
 """
 import json
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from koda.ai.provider import LLMProvider, Message, Model, StreamEvent, ToolCall, Usage
 
@@ -12,20 +12,45 @@ from koda.ai.provider import LLMProvider, Message, Model, StreamEvent, ToolCall,
 class AnthropicProvider(LLMProvider):
     """
     Anthropic Claude provider
-    
+
     Features:
     - Claude 3.5 Sonnet/Opus/Haiku
     - Extended thinking mode
     - 200K context window
     """
-    
+
     DEFAULT_BASE_URL = "https://api.anthropic.com"
-    
-    def __init__(self, api_key: str, base_url: Optional[str] = None, **kwargs):
+
+    def __init__(
+        self,
+        api_key: str,
+        base_url: Optional[str] = None,
+        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        **kwargs
+    ):
         super().__init__(api_key, base_url or self.DEFAULT_BASE_URL, **kwargs)
         self._client = None
         self.thinking_level = kwargs.get("thinking_level")  # low/medium/high
-    
+        self._proxy = proxy
+
+    def _get_proxy_config(self) -> Optional[str]:
+        """Get proxy configuration for httpx client"""
+        if self._proxy is None:
+            # Try to load from environment
+            from koda.ai.http_proxy import load_proxy_from_env
+            proxy_config = load_proxy_from_env()
+            if proxy_config:
+                return proxy_config.url
+            return None
+
+        if isinstance(self._proxy, str):
+            return self._proxy
+
+        if isinstance(self._proxy, dict):
+            return self._proxy.get("https://") or self._proxy.get("http://")
+
+        return None
+
     def _get_client(self):
         """Lazy initialization of Anthropic client"""
         if self._client is None:
@@ -33,11 +58,25 @@ class AnthropicProvider(LLMProvider):
                 from anthropic import AsyncAnthropic
             except ImportError:
                 raise ImportError("anthropic package required. Install: pip install anthropic")
-            
-            self._client = AsyncAnthropic(
-                api_key=self.api_key,
-                base_url=self.base_url,
-            )
+
+            client_kwargs = {
+                "api_key": self.api_key,
+                "base_url": self.base_url,
+            }
+
+            # Configure proxy if available
+            proxy_url = self._get_proxy_config()
+            if proxy_url:
+                try:
+                    import httpx
+                    client_kwargs["http_client"] = httpx.AsyncClient(
+                        proxy=proxy_url,
+                        timeout=httpx.Timeout(60.0, connect=30.0)
+                    )
+                except ImportError:
+                    pass
+
+            self._client = AsyncAnthropic(**client_kwargs)
         return self._client
     
     async def chat(

@@ -135,6 +135,22 @@ from .modes import (
     PrintMode,
 )
 
+# Main entry point
+from .main import (
+    CodingMain,
+    RunMode,
+    CLIContext,
+    create_argument_parser,
+    parse_args,
+    build_config,
+    main,
+    main_async,
+    main_with_args,
+    run,
+    chat,
+    ask,
+)
+
 # Existing exports
 from .download import (
     download_file,
@@ -262,6 +278,19 @@ __all__ = [
     "ModeContext",
     "ModeResponse",
     "PrintMode",
+    # Main entry point
+    "CodingMain",
+    "RunMode",
+    "CLIContext",
+    "create_argument_parser",
+    "parse_args",
+    "build_config",
+    "main",
+    "main_async",
+    "main_with_args",
+    "run",
+    "chat",
+    "ask",
     # Download
     "download_file",
     "download_with_retry",
